@@ -15,6 +15,19 @@ namespace BudgetManagerAPI.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<Goal>()
+                .Property(g => g.CurrentProgress)
+                .HasPrecision(18, 2);
+
+            modelBuilder.Entity<Goal>()
+                .Property(g => g.TargetAmount)
+                .HasPrecision(18, 2);
+
+            modelBuilder.Entity<Transaction>()
+                .Property(t => t.Amount)
+                .HasPrecision(18, 2);
+
             modelBuilder.Entity<User>()
                 .HasMany(u => u.Transactions)
                 .WithOne(t => t.User)
