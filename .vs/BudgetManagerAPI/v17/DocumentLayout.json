@@ -1,0 +1,164 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "D:\\STUDIA\\INZYNIERKA\\Server\\BudgetManagerAPI\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{E639D219-2ADC-4DAF-A078-71B4DB11F904}|BudgetManagerAPI\\BudgetManagerAPI.csproj|d:\\studia\\inzynierka\\server\\budgetmanagerapi\\budgetmanagerapi\\data\\appdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E639D219-2ADC-4DAF-A078-71B4DB11F904}|BudgetManagerAPI\\BudgetManagerAPI.csproj|solutionrelative:budgetmanagerapi\\data\\appdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E639D219-2ADC-4DAF-A078-71B4DB11F904}|BudgetManagerAPI\\BudgetManagerAPI.csproj|d:\\studia\\inzynierka\\server\\budgetmanagerapi\\budgetmanagerapi\\models\\goal.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E639D219-2ADC-4DAF-A078-71B4DB11F904}|BudgetManagerAPI\\BudgetManagerAPI.csproj|solutionrelative:budgetmanagerapi\\models\\goal.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E639D219-2ADC-4DAF-A078-71B4DB11F904}|BudgetManagerAPI\\BudgetManagerAPI.csproj|d:\\studia\\inzynierka\\server\\budgetmanagerapi\\budgetmanagerapi\\models\\category.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E639D219-2ADC-4DAF-A078-71B4DB11F904}|BudgetManagerAPI\\BudgetManagerAPI.csproj|solutionrelative:budgetmanagerapi\\models\\category.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E639D219-2ADC-4DAF-A078-71B4DB11F904}|BudgetManagerAPI\\BudgetManagerAPI.csproj|d:\\studia\\inzynierka\\server\\budgetmanagerapi\\budgetmanagerapi\\models\\transaction.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E639D219-2ADC-4DAF-A078-71B4DB11F904}|BudgetManagerAPI\\BudgetManagerAPI.csproj|solutionrelative:budgetmanagerapi\\models\\transaction.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E639D219-2ADC-4DAF-A078-71B4DB11F904}|BudgetManagerAPI\\BudgetManagerAPI.csproj|d:\\studia\\inzynierka\\server\\budgetmanagerapi\\budgetmanagerapi\\models\\user.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E639D219-2ADC-4DAF-A078-71B4DB11F904}|BudgetManagerAPI\\BudgetManagerAPI.csproj|solutionrelative:budgetmanagerapi\\models\\user.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E639D219-2ADC-4DAF-A078-71B4DB11F904}|BudgetManagerAPI\\BudgetManagerAPI.csproj|d:\\studia\\inzynierka\\server\\budgetmanagerapi\\budgetmanagerapi\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E639D219-2ADC-4DAF-A078-71B4DB11F904}|BudgetManagerAPI\\BudgetManagerAPI.csproj|solutionrelative:budgetmanagerapi\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E639D219-2ADC-4DAF-A078-71B4DB11F904}|BudgetManagerAPI\\BudgetManagerAPI.csproj|d:\\studia\\inzynierka\\server\\budgetmanagerapi\\budgetmanagerapi\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{E639D219-2ADC-4DAF-A078-71B4DB11F904}|BudgetManagerAPI\\BudgetManagerAPI.csproj|solutionrelative:budgetmanagerapi\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E639D219-2ADC-4DAF-A078-71B4DB11F904}|BudgetManagerAPI\\BudgetManagerAPI.csproj|d:\\studia\\inzynierka\\server\\budgetmanagerapi\\budgetmanagerapi\\budgetmanagerapi.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|",
+      "RelativeMoniker": "D:0:0:{E639D219-2ADC-4DAF-A078-71B4DB11F904}|BudgetManagerAPI\\BudgetManagerAPI.csproj|solutionrelative:budgetmanagerapi\\budgetmanagerapi.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 1,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{aa2115a1-9712-457b-9047-dbb71ca2cdd2}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "AppDbContext.cs",
+              "DocumentMoniker": "D:\\STUDIA\\INZYNIERKA\\Server\\BudgetManagerAPI\\BudgetManagerAPI\\Data\\AppDbContext.cs",
+              "RelativeDocumentMoniker": "BudgetManagerAPI\\Data\\AppDbContext.cs",
+              "ToolTip": "D:\\STUDIA\\INZYNIERKA\\Server\\BudgetManagerAPI\\BudgetManagerAPI\\Data\\AppDbContext.cs",
+              "RelativeToolTip": "BudgetManagerAPI\\Data\\AppDbContext.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-11-29T12:54:38.427Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "Goal.cs",
+              "DocumentMoniker": "D:\\STUDIA\\INZYNIERKA\\Server\\BudgetManagerAPI\\BudgetManagerAPI\\Models\\Goal.cs",
+              "RelativeDocumentMoniker": "BudgetManagerAPI\\Models\\Goal.cs",
+              "ToolTip": "D:\\STUDIA\\INZYNIERKA\\Server\\BudgetManagerAPI\\BudgetManagerAPI\\Models\\Goal.cs",
+              "RelativeToolTip": "BudgetManagerAPI\\Models\\Goal.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAwAAAAmAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-11-29T12:52:35.495Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "Category.cs",
+              "DocumentMoniker": "D:\\STUDIA\\INZYNIERKA\\Server\\BudgetManagerAPI\\BudgetManagerAPI\\Models\\Category.cs",
+              "RelativeDocumentMoniker": "BudgetManagerAPI\\Models\\Category.cs",
+              "ToolTip": "D:\\STUDIA\\INZYNIERKA\\Server\\BudgetManagerAPI\\BudgetManagerAPI\\Models\\Category.cs",
+              "RelativeToolTip": "BudgetManagerAPI\\Models\\Category.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAwAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-11-29T12:50:51.219Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "Transaction.cs",
+              "DocumentMoniker": "D:\\STUDIA\\INZYNIERKA\\Server\\BudgetManagerAPI\\BudgetManagerAPI\\Models\\Transaction.cs",
+              "RelativeDocumentMoniker": "BudgetManagerAPI\\Models\\Transaction.cs",
+              "ToolTip": "D:\\STUDIA\\INZYNIERKA\\Server\\BudgetManagerAPI\\BudgetManagerAPI\\Models\\Transaction.cs",
+              "RelativeToolTip": "BudgetManagerAPI\\Models\\Transaction.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABAAAAAuAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-11-29T12:48:54.652Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "User.cs",
+              "DocumentMoniker": "D:\\STUDIA\\INZYNIERKA\\Server\\BudgetManagerAPI\\BudgetManagerAPI\\Models\\User.cs",
+              "RelativeDocumentMoniker": "BudgetManagerAPI\\Models\\User.cs",
+              "ToolTip": "D:\\STUDIA\\INZYNIERKA\\Server\\BudgetManagerAPI\\BudgetManagerAPI\\Models\\User.cs",
+              "RelativeToolTip": "BudgetManagerAPI\\Models\\User.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA4AAAA0AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-11-29T12:46:29.928Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "Program.cs",
+              "DocumentMoniker": "D:\\STUDIA\\INZYNIERKA\\Server\\BudgetManagerAPI\\BudgetManagerAPI\\Program.cs",
+              "RelativeDocumentMoniker": "BudgetManagerAPI\\Program.cs",
+              "ToolTip": "D:\\STUDIA\\INZYNIERKA\\Server\\BudgetManagerAPI\\BudgetManagerAPI\\Program.cs",
+              "RelativeToolTip": "BudgetManagerAPI\\Program.cs",
+              "ViewState": "AgIAAAUAAAAAAAAAAAAAABYAAAAzAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-11-29T12:44:25.879Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "appsettings.json",
+              "DocumentMoniker": "D:\\STUDIA\\INZYNIERKA\\Server\\BudgetManagerAPI\\BudgetManagerAPI\\appsettings.json",
+              "RelativeDocumentMoniker": "BudgetManagerAPI\\appsettings.json",
+              "ToolTip": "D:\\STUDIA\\INZYNIERKA\\Server\\BudgetManagerAPI\\BudgetManagerAPI\\appsettings.json",
+              "RelativeToolTip": "BudgetManagerAPI\\appsettings.json",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAkAAAAEAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2024-11-29T12:40:36.055Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "BudgetManagerAPI.csproj",
+              "DocumentMoniker": "D:\\STUDIA\\INZYNIERKA\\Server\\BudgetManagerAPI\\BudgetManagerAPI\\BudgetManagerAPI.csproj",
+              "RelativeDocumentMoniker": "BudgetManagerAPI\\BudgetManagerAPI.csproj",
+              "ToolTip": "D:\\STUDIA\\INZYNIERKA\\Server\\BudgetManagerAPI\\BudgetManagerAPI\\BudgetManagerAPI.csproj",
+              "RelativeToolTip": "BudgetManagerAPI\\BudgetManagerAPI.csproj",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABMAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
+              "WhenOpened": "2024-11-29T12:36:36.674Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{269a02dc-6af8-11d3-bdc4-00c04f688e50}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
