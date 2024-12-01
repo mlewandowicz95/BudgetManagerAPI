@@ -5,6 +5,8 @@ VisualStudioVersion = 17.11.35431.28
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BudgetManagerAPI", "BudgetManagerAPI\BudgetManagerAPI.csproj", "{E639D219-2ADC-4DAF-A078-71B4DB11F904}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BudgetManager.UnitTests", "BudgetManager.UnitTests\BudgetManager.UnitTests.csproj", "{A183B91A-54DB-4F09-90F1-ACCD1085E31F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{E639D219-2ADC-4DAF-A078-71B4DB11F904}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E639D219-2ADC-4DAF-A078-71B4DB11F904}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E639D219-2ADC-4DAF-A078-71B4DB11F904}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A183B91A-54DB-4F09-90F1-ACCD1085E31F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A183B91A-54DB-4F09-90F1-ACCD1085E31F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A183B91A-54DB-4F09-90F1-ACCD1085E31F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A183B91A-54DB-4F09-90F1-ACCD1085E31F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
