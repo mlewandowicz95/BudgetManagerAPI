@@ -1,6 +1,7 @@
 
 using BudgetManagerAPI.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace BudgetManagerAPI
 {
@@ -9,6 +10,12 @@ namespace BudgetManagerAPI
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+
+            builder.Logging.ClearProviders();
+            builder.Logging.AddConsole();
+            builder.Logging.AddDebug();
+           // builder.Logging.AddFile("Logs/myapp-{Date}.txt"); - wymagany Serilog
+
 
             // Add services to the container.
             builder.Services.AddDbContext<AppDbContext>(options =>
