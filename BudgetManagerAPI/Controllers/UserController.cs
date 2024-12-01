@@ -46,6 +46,12 @@ namespace BudgetManagerAPI.Controllers
         [HttpPost]
         public async Task<ActionResult<User>> PostUser(User user)
         {
+
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 

@@ -105,11 +105,12 @@ namespace BudgetManager.UnitTests.Controllers
             using var context = new AppDbContext(options);
             var newUser = new User { Email = "invalid-email", PasswordHash="12321hj3" }; //Niepoprawny email 
             var controller = new UserController(context);
-
+             controller.ModelState.AddModelError("email", "Email is failed");
+      
             // Act
             var result = await controller.PostUser(newUser);
 
-            Assert.IsType<BadRequestResult>(result.Result);
+            Assert.IsType<BadRequestObjectResult>(result.Result);
         }
 
         [Fact]
