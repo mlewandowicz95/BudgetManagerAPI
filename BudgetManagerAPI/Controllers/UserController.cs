@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace BudgetManagerAPI.Controllers
 {
-    [Authorize]
+  //  [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class UserController : ControllerBase
