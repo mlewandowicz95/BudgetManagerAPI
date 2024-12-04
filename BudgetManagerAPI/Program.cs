@@ -1,7 +1,10 @@
 
 using BudgetManagerAPI.Data;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 namespace BudgetManagerAPI
 {
@@ -11,11 +14,31 @@ namespace BudgetManagerAPI
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            // Add Logging
             builder.Logging.ClearProviders();
             builder.Logging.AddConsole();
             builder.Logging.AddDebug();
-           // builder.Logging.AddFile("Logs/myapp-{Date}.txt"); - wymagany Serilog
+            // builder.Logging.AddFile("Logs/myapp-{Date}.txt"); - wymagany Serilog
 
+
+            // Add authentication
+            builder.Services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            }).AddJwtBearer(options =>
+            {
+                options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    ValidIssuer = builder.Configuration["JwtSettings:Issuer"],
+                    ValidAudience = builder.Configuration["JwtSettings:Audience"],
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JwtSettings:SecretKey"]))
+                };
+            });
 
             // Add services to the container.
             builder.Services.AddDbContext<AppDbContext>(options =>
@@ -38,6 +61,7 @@ namespace BudgetManagerAPI
 
             app.UseHttpsRedirection();
 
+            app.UseAuthentication();    // Add middleware to operate authentication
             app.UseAuthorization();
 
 
