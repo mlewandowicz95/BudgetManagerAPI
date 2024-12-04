@@ -1,12 +1,14 @@
 ﻿using BudgetManagerAPI.Data;
 using BudgetManagerAPI.DTO;
 using BudgetManagerAPI.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace BudgetManagerAPI.Controllers
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class UserController : ControllerBase
@@ -18,6 +20,12 @@ namespace BudgetManagerAPI.Controllers
         {
             _context = context;
             _logger = logger;
+        }
+
+        [HttpGet("secure-data")]
+        public IActionResult GetSecureData()
+        {
+            return Ok(new { Message = "This is protected data" });
         }
 
         // GET: api/User

@@ -18,6 +18,11 @@ namespace BudgetManagerAPI.Services
             _jwtSettings = jwtSettings.Value;
         }
 
+        public TokenService(JwtSettings jwtSettings)
+        {
+            _jwtSettings = jwtSettings;
+        }
+
         public string GenerateToken(User user)
         {
             var claims = new[]
@@ -40,5 +45,29 @@ namespace BudgetManagerAPI.Services
 
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
+
+        public string GenerateToken(int userId, string email)
+        {
+            var claims = new[]
+            {
+            new Claim(JwtRegisteredClaimNames.Sub, email),
+            new Claim("UserId", userId.ToString())
+        };
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.SecretKey));
+            var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+            var token = new JwtSecurityToken(
+                issuer: _jwtSettings.Issuer,
+                audience: _jwtSettings.Audience,
+                claims: claims,
+                expires: DateTime.UtcNow.AddMinutes(_jwtSettings.ExpiryInMinutes),
+                signingCredentials: credentials
+            );
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+
+
     }
 }
