@@ -41,7 +41,7 @@ namespace BudgetManagerAPI.Controllers
                         Type = tran.Type,
                     }).ToListAsync();
 
-                _logger.LogInformation("Successfully fetched {Count} transactions", transactions.Count);
+                _logger.LogInformation("Successfully fetched {Count} transactions", transactions.Count());
                 return Ok(transactions);
             }
             catch(Exception ex)

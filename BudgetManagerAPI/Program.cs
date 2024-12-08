@@ -1,10 +1,14 @@
 
 using BudgetManagerAPI.Data;
+using BudgetManagerAPI.Enums;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Any;
+using Microsoft.OpenApi.Models;
 using System.Text;
+using System.Text.Json.Serialization;
 
 namespace BudgetManagerAPI
 {
@@ -45,11 +49,26 @@ namespace BudgetManagerAPI
             options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
             builder.Services.AddLogging(); // logging
-            builder.Services.AddControllers();
+            builder.Services.AddControllers()
+                .AddJsonOptions(options =>
+                {
+                    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+                });
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen();
-
+            builder.Services.AddSwaggerGen(c =>
+            {
+                // Mapowanie dla enum TransactionType
+                c.MapType<TransactionType>(() => new OpenApiSchema
+                {
+                    Type = "string",
+                    Enum = new List<IOpenApiAny>
+        {
+            new OpenApiString("Expense"),
+            new OpenApiString("Income")
+        }
+                });
+            });
             var app = builder.Build();
 
             // Configure the HTTP request pipeline.

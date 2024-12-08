@@ -1,10 +1,13 @@
-﻿namespace BudgetManagerAPI.DTO
+﻿using BudgetManagerAPI.Enums;
+
+
+namespace BudgetManagerAPI.DTO
 {
     public class TransactionRequestDto
     {
         public int UserId { get; set; }
         public decimal Amount { get; set; }
-        public string Type { get; set; } // "Income" or "Expense", 
+        public TransactionType Type { get; set; } // "Income" or "Expense", 
         public int CategoryId { get; set; }
         public string? Description { get; set; }
         public bool IsRecurring { get; set; } = false;
@@ -16,7 +19,7 @@
         public int Id { get; set; }
         public int UserId { get; set; }
         public decimal Amount { get; set; }
-        public string Type { get; set; } // "Income" or "Expense", 
+        public TransactionType Type { get; set; } // "Income" or "Expense", 
         public int CategoryId { get; set; }
         public string? Description { get; set; }
         public bool IsRecurring { get; set; } = false;
