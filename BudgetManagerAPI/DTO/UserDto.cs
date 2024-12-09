@@ -7,7 +7,15 @@ namespace BudgetManagerAPI.DTO
         [Required]
         [EmailAddress]
         public string Email { get; set; }
-        public string PasswordHash { get; set; }
+
+        [Required]
+        [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$",
+    ErrorMessage = "Password must have minimum eight characters, at least one uppercase letter, one lowercase letter, one number, and one special character.")]
+        public string Password { get; set; }
+
+        [Required]
+        [Compare("Password", ErrorMessage = "Passwords do not match.")]
+        public string ConfirmPassword { get; set; }
 
     }
 
@@ -15,9 +23,6 @@ namespace BudgetManagerAPI.DTO
     {
         public int Id { get; set; }
 
-        [Required]
-        [EmailAddress]
         public string Email { get; set; }
-        public string PasswordHash { get; set; }
     }
 }

@@ -50,7 +50,7 @@ namespace BudgetManager.UnitTests.Controllers
                     Date = DateTime.Now,
                     Description = "Kurs C#",
                     IsRecurring = false,
-                    Type = BudgetManagerAPI.Enums.TransactionType.Expense
+                    Type = TransactionType.Expense
                 },
                 new Transaction
                 {
@@ -60,7 +60,7 @@ namespace BudgetManager.UnitTests.Controllers
                     Date = new DateTime(new DateOnly(2024, 12, 05), new TimeOnly(15, 11)),
                     Description = "Etat",
                     IsRecurring = true,
-                    Type = BudgetManagerAPI.Enums.TransactionType.Income
+                    Type = TransactionType.Income
                 }
                 );
 

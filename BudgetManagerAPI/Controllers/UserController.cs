@@ -41,7 +41,6 @@ namespace BudgetManagerAPI.Controllers
                     {
                         Id = user.Id,
                         Email = user.Email,
-                        PasswordHash = user.PasswordHash
                     })
                     .ToListAsync();
 
@@ -71,7 +70,6 @@ namespace BudgetManagerAPI.Controllers
                 {
                     Id = user.Id,
                     Email = user.Email,
-                    PasswordHash = user.PasswordHash
                 };
 
                 return Ok(userResponseDto);
@@ -97,7 +95,7 @@ namespace BudgetManagerAPI.Controllers
             var user = new User
             {
                 Email = userRequestDto.Email,
-                PasswordHash = userRequestDto.PasswordHash
+                PasswordHash = userRequestDto.Password
             };
 
 
@@ -111,7 +109,6 @@ namespace BudgetManagerAPI.Controllers
             {
                 Id=user.Id,
                 Email= user.Email,
-                PasswordHash = user.PasswordHash
             });
         }
 
@@ -132,7 +129,7 @@ namespace BudgetManagerAPI.Controllers
 
             _context.Entry(user).State = EntityState.Modified;
             user.Email = userRequestDto.Email;
-            user.PasswordHash = userRequestDto.PasswordHash;
+            user.PasswordHash = userRequestDto.Password;
             try
             {
                 await _context.SaveChangesAsync();
