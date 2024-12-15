@@ -11,6 +11,7 @@ namespace BudgetManagerAPI.Data
         public virtual DbSet<Transaction> Transactions { get; set; }
         public virtual DbSet<Category> Categories { get; set; }
         public virtual DbSet<Goal> Goals { get; set; }
+        public virtual DbSet<RevokedToken> RevokedTokens { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

@@ -30,8 +30,8 @@ namespace BudgetManagerAPI.Services
 
             var claims = new[]
             {
+            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
             new Claim(JwtRegisteredClaimNames.Sub, email),
-            new Claim("UserId", userId.ToString())
         };
 
             var token = new JwtSecurityToken(

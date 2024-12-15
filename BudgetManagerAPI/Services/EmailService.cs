@@ -1,6 +1,7 @@
 ﻿using BudgetManagerAPI.Configurations;
 using BudgetManagerAPI.Interfaces;
 using MailKit.Net.Smtp;
+using Microsoft.Extensions.Options;
 using MimeKit;
 
 namespace BudgetManagerAPI.Services
@@ -9,9 +10,9 @@ namespace BudgetManagerAPI.Services
     {
         private readonly EmailSettings _emailSettings;
 
-        public EmailService(EmailSettings emailSettings)
+        public EmailService(IOptions<EmailSettings> emailSettings)
         {
-            _emailSettings = emailSettings;
+            _emailSettings = emailSettings.Value;
         }
 
         public async Task SendEmailAsync(string recipientEmail, string subject, string body)
@@ -26,7 +27,7 @@ namespace BudgetManagerAPI.Services
 
             using var smtp = new SmtpClient();
             await smtp.ConnectAsync(_emailSettings.SmtpServer, _emailSettings.Port, MailKit.Security.SecureSocketOptions.StartTls);
-            await smtp.AuthenticateAsync(_emailSettings.SenderEmail, _emailSettings.SenderPassword);
+            await smtp.AuthenticateAsync(_emailSettings.SenderUsername, _emailSettings.SenderPassword);
             await smtp.SendAsync(email);
             await smtp.DisconnectAsync(true);
         }

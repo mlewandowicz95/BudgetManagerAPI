@@ -3,6 +3,7 @@ using BudgetManagerAPI.Configurations;
 using BudgetManagerAPI.Data;
 using BudgetManagerAPI.Enums;
 using BudgetManagerAPI.Interfaces;
+using BudgetManagerAPI.Middleware;
 using BudgetManagerAPI.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -71,9 +72,10 @@ namespace BudgetManagerAPI
             // Add services to the container.
             builder.Services.AddDbContext<AppDbContext>(options =>
             options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
-
+            builder.Services.AddHostedService<CleanupRevokedTokenService>();
             builder.Services.AddLogging(); // logging
             builder.Services.AddScoped<TokenService>();
+            builder.Services.AddScoped<AppDbContext>();
             builder.Services.AddControllers()
                 .AddJsonOptions(options =>
                 {
@@ -93,7 +95,38 @@ namespace BudgetManagerAPI
             new OpenApiString("Income")
         }
                 });
+                c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+                {
+                    Description = "JWT Authorization header using the Bearer scheme. Example: 'Bearer {token}'",
+                    Name = "Authorization",
+                    In = ParameterLocation.Header,
+                    Type = SecuritySchemeType.ApiKey,
+                    Scheme = "Bearer"
+                });
+
+                c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
             });
+            foreach (var service in builder.Services)
+            {
+                Console.WriteLine($"{service.ServiceType.FullName} -> {service.Lifetime}");
+            }
+            var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+            Console.WriteLine($"Connection String: {connectionString}");
+
+
             var app = builder.Build();
 
             // Configure the HTTP request pipeline.
@@ -107,8 +140,12 @@ namespace BudgetManagerAPI
 
             app.UseAuthentication();    // Add middleware to operate authentication
             app.UseAuthorization();
-
-
+            app.UseMiddleware<TokenRevocationMiddleware>();
+            app.Use(async (context, next) =>
+            {
+                Console.WriteLine($"Incoming request: {context.Request.Method} {context.Request.Path}");
+                await next.Invoke();
+            });
             app.MapControllers();
 
             app.Run();

@@ -59,8 +59,11 @@ namespace BudgetManager.UnitTests.Controllers
         {
             _dbContext.Users.Add(new User
             {
+                Id = 1,
                 Email = "exitinguser@example.com",
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword("password123"),
+                IsActive = true,
+
                
             });
             _dbContext.SaveChanges();
@@ -95,8 +98,12 @@ namespace BudgetManager.UnitTests.Controllers
                 It.Is<string>(body => body.Contains(user.ActivationToken))),
                 Times.Once);
 
+            
+
             var okResult = Assert.IsType<OkObjectResult>(result);
-            Assert.Equal("Registration successful. Please check your email to activate your account.", ((dynamic)okResult.Value).Message);
+            var userResponse = Assert.IsType<UserResponseDto>(okResult.Value);
+            Assert.Equal("test@example.com", userResponse.Email);
+            Assert.True(userResponse.Id > 0);
 
 
 
@@ -152,11 +159,11 @@ namespace BudgetManager.UnitTests.Controllers
         {
             var controller = new AuthController(_dbContext, _tokenService, _loggerMock.Object, _mockEmailService.Object);
 
-            var exitingUser = new UserRequestDto
+            var exitingUser = new LoginRequestDto
             {
                 Email = "exitinguser@example.com",
                 Password = "password123",
-                ConfirmPassword = "password123"
+               
             };
 
             var result = await controller.Login(exitingUser);
@@ -173,11 +180,10 @@ namespace BudgetManager.UnitTests.Controllers
         public async Task Login_ShouldReturnUnathorized_WhenCredentialsAreInvalid()
         {
             var controller = new AuthController(_dbContext, _tokenService, _loggerMock.Object, _mockEmailService.Object);
-            var invalidUser = new UserRequestDto
+            var invalidUser = new LoginRequestDto
             {
                 Email = "exitinguser@example.com",
                 Password = "wrongPassword",
-                ConfirmPassword = "wrongPassword"
             };
 
             var result = await controller.Login(invalidUser);
@@ -203,7 +209,7 @@ namespace BudgetManager.UnitTests.Controllers
             _dbContext.Users.Add(user);
             await _dbContext.SaveChangesAsync();
 
-            var loginDto = new UserRequestDto
+            var loginDto = new LoginRequestDto
             {
                 Email = "test@example.com",
                 Password = "ValidPassword"
