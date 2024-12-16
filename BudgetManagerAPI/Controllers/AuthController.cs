@@ -118,6 +118,41 @@ namespace BudgetManagerAPI.Controllers
             return Ok(new { Message = "Account activated successfully. You can now log in." });
         }
 
+        [HttpPost("resend-activasion-link")]
+        public async Task<IActionResult> ResendActivationLink([FromBody] ResendActivationRequestDto request)
+        {
+            if(!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+            if(user == null)
+            {
+                return NotFound(new { Message = "User not found." });
+            }
+
+            if (user.IsActive)
+            {
+                return BadRequest(new { Message = "User is already active." });
+            }
+
+            user.ActivationToken = Guid.NewGuid().ToString("N");
+            await _context.SaveChangesAsync();
+
+            var activationLink = Url.Action(
+                nameof(ConfirmEmail),
+                "Auth",
+                new { token = user.ActivationToken },
+                protocol: HttpContext.Request.Scheme
+                );
+
+            await _emailService.SendEmailAsync(user.Email, "Activate your account",
+                $"Click the link to activate your account: {activationLink}"
+                );
+
+            return Ok(new { Message = "Activaion link has been resent." });
+        }
 
 
         [HttpPost("login")]
@@ -159,19 +194,24 @@ namespace BudgetManagerAPI.Controllers
         }
 
         [HttpPost("request-password-reset")]
-        public async Task<IActionResult> RequestPasswordReset([FromBody] string email)
+        public async Task<IActionResult> RequestPasswordReset([FromBody] ResetPasswordRequestDto requestDto)
         {
-            if (string.IsNullOrEmpty(email))
+            if(!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            if (string.IsNullOrEmpty(requestDto.Email))
             {
                 _logger.LogError("Email is empty");
                 return BadRequest(new { Message = "Email is empty" });
             }
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == requestDto.Email);
             if (user == null)
             {
-                _logger.LogInformation("User with email {email} not found.", email);
-                return NotFound(new { Message = "User with email {email} not found.", email });
+                _logger.LogInformation("User with email {email} not found.", requestDto.Email);
+                return NotFound(new { Message = "User with email {email} not found.", requestDto.Email });
             }
 
             var resetToken = Guid.NewGuid().ToString("N");
@@ -186,7 +226,7 @@ namespace BudgetManagerAPI.Controllers
                 new { token = user.ResetToken },
                 protocol: HttpContext.Request.Scheme);
 
-            await _emailService.SendEmailAsync(email, "Reset your password",
+            await _emailService.SendEmailAsync(user.Email, "Reset your password",
                 $"Use the following link to reset your password: {activationLink}");
 
             return Ok(new { Message = "Password reset link sent to you email." });
