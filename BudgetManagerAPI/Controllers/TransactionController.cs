@@ -46,7 +46,7 @@ namespace BudgetManagerAPI.Controllers
             }
             catch(Exception ex)
             {
-                _logger.LogError(ex, "An error occured while fetching categories.");
+                _logger.LogError(ex, "An error occured while fetching transactions.");
                 return StatusCode(500, new { Message = "An error occured while processing your request." });
             }
         }
@@ -154,7 +154,7 @@ namespace BudgetManagerAPI.Controllers
             catch (DbUpdateConcurrencyException)
             {
                 _logger.LogWarning("Concurrency conflict while updating transaction with ID {id}.", id);
-                return StatusCode(409, new { Message = "Concurrency conflict occured while updating the category." });
+                return StatusCode(409, new { Message = "Concurrency conflict occured while updating the transaction." });
             }
             return NoContent();
         }
