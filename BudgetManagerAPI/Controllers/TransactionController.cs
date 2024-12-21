@@ -1,8 +1,11 @@
 ﻿using BudgetManagerAPI.Data;
 using BudgetManagerAPI.DTO;
+using BudgetManagerAPI.Enums;
 using BudgetManagerAPI.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace BudgetManagerAPI.Controllers
 {
@@ -20,34 +23,110 @@ namespace BudgetManagerAPI.Controllers
             _logger = logger;
         }
 
+        private int GetParseUserId()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+            {
+                return 0;
+            }
+
+
+            int parsedUserId = int.Parse(userId);
+            return parsedUserId;
+        }
+
         //GET: api/Transaction
+        [Authorize]
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<TransactionResponseDto>>> GetTransactions()
+        public async Task<IActionResult> GetTransactions(
+    [FromQuery] TransactionType? type,      // Przychód/Wydatek
+    [FromQuery] int? categoryId,           // ID kategorii
+    [FromQuery] DateTime? startDate,       // Początek zakresu dat
+    [FromQuery] DateTime? endDate,         // Koniec zakresu dat
+    [FromQuery] string? description,       // Opis (częściowy)
+    [FromQuery] int page = 1,
+    [FromQuery] int pageSize = 10,
+    [FromQuery] string sortBy = "date",
+    [FromQuery] string sortOrder = "desc")        
         {
             try
             {
-                _logger.LogInformation("Fetching all transactions");
+                _logger.LogInformation("Fetching transactions with filters");
 
-                var transactions = await _context.Transactions
-                    .Select(tran => new TransactionResponseDto
+                var query = _context.Transactions.AsQueryable();
+
+                // Filtrowanie według typu transakcji
+                if (type.HasValue)
+                {
+                    query = query.Where(tran => tran.Type == type.Value);
+                }
+
+                // Filtrowanie według kategorii
+                if (categoryId.HasValue)
+                {
+                    query = query.Where(tran => tran.CategoryId == categoryId.Value);
+                }
+
+                // Filtrowanie według zakresu dat
+                if (startDate.HasValue)
+                {
+                    query = query.Where(tran => tran.Date >= startDate.Value);
+                }
+
+                if (endDate.HasValue)
+                {
+                    query = query.Where(tran => tran.Date <= endDate.Value);
+                }
+
+                // Filtrowanie według opisu
+                if (!string.IsNullOrEmpty(description))
+                {
+                    query = query.Where(tran => tran.Description != null && tran.Description.Contains(description));
+                }
+
+                if(!string.IsNullOrEmpty(sortBy))
+                {
+                    query = sortBy.ToLower() switch
                     {
-                        Id = tran.Id,
-                        UserId = tran.UserId,
-                        CategoryId = tran.CategoryId,
+                        "amount" => sortOrder.Equals("asc", StringComparison.CurrentCultureIgnoreCase) ? query.OrderBy(t => t.Amount) : query.OrderByDescending(t => t.Amount),
+                        "category" => sortOrder.Equals("asc", StringComparison.CurrentCultureIgnoreCase) ? query.OrderBy(t => t.Category.Name) : query.OrderByDescending(t => t.Category.Name),
+                        _ => sortOrder.Equals("asc", StringComparison.CurrentCultureIgnoreCase) ? query.OrderBy(t => t.Date) : query.OrderByDescending(t => t.Date),
+                    };
+                }
+
+                var totalItems = await query.CountAsync();
+
+                // Przekształcenie wyników do DTO
+                var transactions = await query
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .Select(tran => new TransactionDto
+                    {
+                        CategoryName = tran.Category.Name,
                         Amount = tran.Amount,
                         Date = tran.Date,
                         Description = tran.Description,
-                        IsRecurring = tran.IsRecurring,
-                        Type = tran.Type,
-                    }).ToListAsync();
+                        Type = tran.Type.ToString(),
+                    })
+                    .ToListAsync();
 
-                _logger.LogInformation("Successfully fetched {Count} transactions", transactions.Count());
-                return Ok(transactions);
+                var result = new PagedResult<TransactionDto>
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalItems = totalItems,
+                    TotalPages = (int)Math.Ceiling(totalItems / (double)pageSize),
+                    Items = transactions
+                };
+
+                _logger.LogInformation("Successfully fetched {Count} transactions with filters", transactions.Count());
+                return Ok(result);
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occured while fetching categories.");
-                return StatusCode(500, new { Message = "An error occured while processing your request." });
+                _logger.LogError(ex, "An error occurred while fetching transactions.");
+                return StatusCode(500, new { Message = "An error occurred while processing your request." });
             }
         }
 
@@ -58,7 +137,7 @@ namespace BudgetManagerAPI.Controllers
             try
             {
                 var transaction = await _context.Transactions.FindAsync(id);
-                if(transaction == null)
+                if (transaction == null)
                 {
                     return NotFound(new { Message = $"Transaction with ID {id} not found" });
                 }
@@ -77,7 +156,7 @@ namespace BudgetManagerAPI.Controllers
 
                 return Ok(transactionResponseDto);
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 _logger.LogError($"Error in GetTransaction(int id): {ex.Message}");
                 return StatusCode(500, new { Message = "An error occured while processing your request." });
@@ -88,7 +167,7 @@ namespace BudgetManagerAPI.Controllers
         [HttpPost]
         public async Task<ActionResult<TransactionResponseDto>> PostTransaction([FromBody] TransactionRequestDto transactionRequestDto)
         {
-            if(!ModelState.IsValid)
+            if (!ModelState.IsValid)
             {
                 _logger.LogError("Model is not valid");
                 return BadRequest(ModelState);
@@ -126,14 +205,14 @@ namespace BudgetManagerAPI.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> PutTransaction(int id, [FromBody] TransactionRequestDto dto)
         {
-            if(id <= 0)
+            if (id <= 0)
             {
                 _logger.LogError("Invalid ID");
                 return BadRequest(new { Message = "Invalid ID" });
             }
 
             var transaction = await _context.Transactions.FindAsync(id);
-            if(transaction == null)
+            if (transaction == null)
             {
                 return NotFound(new { Message = $"Transaction with ID {id} not found." });
             }
@@ -154,7 +233,7 @@ namespace BudgetManagerAPI.Controllers
             catch (DbUpdateConcurrencyException)
             {
                 _logger.LogWarning("Concurrency conflict while updating transaction with ID {id}.", id);
-                return StatusCode(409, new { Message = "Concurrency conflict occured while updating the category." });
+                return StatusCode(409, new { Message = "Concurrency conflict occured while updating the transaction." });
             }
             return NoContent();
         }

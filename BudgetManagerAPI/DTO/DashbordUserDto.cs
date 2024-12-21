@@ -26,5 +26,6 @@
         public decimal CurrentProgress { get; set; }
         public decimal ProgressPercentage => (CurrentProgress / TargetAmount) * 100;
         public DateTime? DueDate { get; set; }
+        public bool IsCloseToCompletion => ProgressPercentage >= 80;
     }
 }
