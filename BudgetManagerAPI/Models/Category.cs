@@ -8,5 +8,7 @@
 
         public User? User { get; set; }
         public IEnumerable<Transaction> Transactions { get; set; }
+        public ICollection<MonthlyBudget> MonthlyBudgets { get; set; }
+
     }
 }

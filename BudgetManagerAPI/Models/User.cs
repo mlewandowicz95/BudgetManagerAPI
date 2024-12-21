@@ -28,5 +28,6 @@ namespace BudgetManagerAPI.Models
         public ICollection<Transaction> Transactions { get; set; }
         public ICollection<Category> Categories { get; set; }
         public ICollection<Goal> Goals { get; set; }
+        public ICollection<MonthlyBudget> MonthlyBudgets { get; set; }
     }
 }

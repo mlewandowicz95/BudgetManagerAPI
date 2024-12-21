@@ -12,6 +12,7 @@ namespace BudgetManagerAPI.Data
         public virtual DbSet<Category> Categories { get; set; }
         public virtual DbSet<Goal> Goals { get; set; }
         public virtual DbSet<RevokedToken> RevokedTokens { get; set; }
+        public virtual DbSet<MonthlyBudget> MonthlyBudgets { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -27,6 +28,10 @@ namespace BudgetManagerAPI.Data
 
             modelBuilder.Entity<Transaction>()
                 .Property(t => t.Amount)
+                .HasPrecision(18, 2);
+
+            modelBuilder.Entity<MonthlyBudget>()
+                .Property(b => b.Amount)
                 .HasPrecision(18, 2);
 
             modelBuilder.Entity<User>()
@@ -51,6 +56,21 @@ namespace BudgetManagerAPI.Data
                 .WithOne(g => g.User)
                 .HasForeignKey(g => g.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+
+            modelBuilder.Entity<MonthlyBudget>(entity =>
+            {
+                entity.HasOne(mb => mb.User)
+                    .WithMany(u => u.MonthlyBudgets)
+                    .HasForeignKey(mb => mb.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(mb => mb.Category)
+                    .WithMany(c => c.MonthlyBudgets)
+                    .HasForeignKey(mb => mb.CategoryId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+            });
 
         }
     }
