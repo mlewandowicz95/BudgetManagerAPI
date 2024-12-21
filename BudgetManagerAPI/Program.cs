@@ -21,6 +21,8 @@ namespace BudgetManagerAPI
     {
         public static void Main(string[] args)
         {
+            QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+
             var builder = WebApplication.CreateBuilder(args);
 
             // Add Logging
@@ -76,6 +78,7 @@ namespace BudgetManagerAPI
             builder.Services.AddLogging(); // logging
             builder.Services.AddScoped<TokenService>();
             builder.Services.AddScoped<AlertService>();
+            builder.Services.AddScoped<IPdfReportService, PdfReportService>();
             builder.Services.AddScoped<AppDbContext>();
             builder.Services.AddControllers()
                 .AddJsonOptions(options =>
