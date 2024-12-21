@@ -179,7 +179,7 @@ namespace BudgetManagerAPI.Controllers
 
             user.LastLogin = DateTime.UtcNow;
 
-            var token = _tokenService.GenerateToken(user.Id, user.Email);
+            var token = _tokenService.GenerateToken(user.Id, user.Email, user.Role);
 
             await _context.SaveChangesAsync();
 
@@ -190,7 +190,7 @@ namespace BudgetManagerAPI.Controllers
                 {
                     Id = user.Id,
                     Email = user.Email,
-
+                    Role = user.Role
                 }
             });
         }

@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using BudgetManagerAPI.Constants;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
@@ -24,6 +25,9 @@ namespace BudgetManagerAPI.Models
         [MaxLength(64)]
         public string ResetToken { get; set; }
         public DateTime? ResetTokenExpiry { get; set; }
+        [Required]
+        [MaxLength(20)]
+        public string Role { get; set; } = Roles.User;
 
         public ICollection<Transaction> Transactions { get; set; }
         public ICollection<Category> Categories { get; set; }

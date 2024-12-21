@@ -1,11 +1,13 @@
 ﻿using BudgetManagerAPI.Data;
 using BudgetManagerAPI.DTO;
 using BudgetManagerAPI.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace BudgetManagerAPI.Controllers
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class GoalController : ControllerBase

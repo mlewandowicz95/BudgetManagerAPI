@@ -23,7 +23,7 @@ namespace BudgetManager.UnitTests.Services
             };
 
             var tokenService = new TokenService(jwtSettings);
-            var token = tokenService.GenerateToken(1, "test@example.com");
+            var token = tokenService.GenerateToken(1, "test@example.com", "User");
 
             Assert.NotNull(token);
             var handler = new JwtSecurityTokenHandler();

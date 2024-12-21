@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace BudgetManagerAPI.Controllers
 {
-  //  [Authorize]
+    [Authorize(Roles = "Admin")]
     [Route("api/[controller]")]
     [ApiController]
     public class UserController : ControllerBase
@@ -22,11 +22,6 @@ namespace BudgetManagerAPI.Controllers
             _logger = logger;
         }
 
-        [HttpGet("secure-data")]
-        public IActionResult GetSecureData()
-        {
-            return Ok(new { Message = "This is protected data" });
-        }
 
         // GET: api/User
         [HttpGet]
@@ -41,6 +36,7 @@ namespace BudgetManagerAPI.Controllers
                     {
                         Id = user.Id,
                         Email = user.Email,
+                        Role = user.Role,
                     })
                     .ToListAsync();
 
@@ -70,6 +66,8 @@ namespace BudgetManagerAPI.Controllers
                 {
                     Id = user.Id,
                     Email = user.Email,
+                    Role = user.Role,
+
                 };
 
                 return Ok(userResponseDto);
@@ -83,6 +81,7 @@ namespace BudgetManagerAPI.Controllers
         }
 
         // POST: api/User
+        
         [HttpPost]
         public async Task<ActionResult<UserResponseDto>> PostUser(UserRequestDto userRequestDto)
         {
@@ -95,7 +94,7 @@ namespace BudgetManagerAPI.Controllers
             var user = new User
             {
                 Email = userRequestDto.Email,
-                PasswordHash = userRequestDto.Password
+                PasswordHash = userRequestDto.Password,
             };
 
 
@@ -109,6 +108,8 @@ namespace BudgetManagerAPI.Controllers
             {
                 Id=user.Id,
                 Email= user.Email,
+                Role = user.Role,
+
             });
         }
 

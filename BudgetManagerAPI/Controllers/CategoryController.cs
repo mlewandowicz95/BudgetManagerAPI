@@ -1,6 +1,7 @@
 ﻿using BudgetManagerAPI.Data;
 using BudgetManagerAPI.DTO;
 using BudgetManagerAPI.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BudgetManagerAPI.Controllers
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class CategoryController : ControllerBase
@@ -82,6 +84,7 @@ namespace BudgetManagerAPI.Controllers
         }
 
         // POST: api/Category
+        [Authorize(Roles = "Admin,Pro")]
         [HttpPost]
         public async Task<ActionResult<Category>> PostCategory([FromBody] CategoryRequestDto categoryRequestDto)
         {
@@ -108,6 +111,7 @@ namespace BudgetManagerAPI.Controllers
         }
         // PUT: api/Category/2
         [HttpPut("{id}")]
+        [Authorize(Roles = "Admin,Pro")]
         public async Task<IActionResult> PutCategory(int id, [FromBody] CategoryRequestDto dto)
         {
 
@@ -144,6 +148,7 @@ namespace BudgetManagerAPI.Controllers
 
         // DELETE: api/Category/2
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> DeleteCategory(int id)
         {
             if (id <= 0)
