@@ -181,6 +181,8 @@ namespace BudgetManagerAPI.Controllers
 
             var token = _tokenService.GenerateToken(user.Id, user.Email);
 
+            await _context.SaveChangesAsync();
+
             return Ok(new LoginResponseDto
             {
                 Token = token,

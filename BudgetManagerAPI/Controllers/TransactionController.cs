@@ -2,6 +2,7 @@
 using BudgetManagerAPI.DTO;
 using BudgetManagerAPI.Enums;
 using BudgetManagerAPI.Models;
+using BudgetManagerAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,12 +16,13 @@ namespace BudgetManagerAPI.Controllers
     {
         private readonly AppDbContext _context;
         private readonly ILogger<TransactionController> _logger;
+        private readonly AlertService _alertService;
 
-
-        public TransactionController(AppDbContext context, ILogger<TransactionController> logger)
+        public TransactionController(AppDbContext context, ILogger<TransactionController> logger, AlertService alertService)
         {
             _context = context;
             _logger = logger;
+            _alertService = alertService;
         }
 
         private int GetParseUserId()
@@ -186,6 +188,35 @@ namespace BudgetManagerAPI.Controllers
 
             _context.Transactions.Add(transaction);
             await _context.SaveChangesAsync();
+
+            // Check budget after save transaction
+            if(transaction.Type == TransactionType.Expense)
+            {
+                var monthlyBudget = await _context.MonthlyBudgets
+                    .FirstOrDefaultAsync(b => b.UserId == transaction.UserId && b.CategoryId == transaction.CategoryId
+                    && b.Month == new DateTime(transaction.Date.Year, transaction.Date.Month, 1));
+
+                if(monthlyBudget != null)
+                {
+                    var totalSpent = await _context.Transactions
+                        .Where(t => t.UserId == transaction.UserId && t.CategoryId == transaction.CategoryId
+                        && t.Type == transaction.Type && t.Date.Year == transaction.Date.Year && t.Date.Month == transaction.Date.Month)
+                        .SumAsync(t => t.Amount);
+
+                    // Ręczne załadowanie kategorii
+                    await _context.Entry(transaction).Reference(t => t.Category).LoadAsync();
+
+                    if (totalSpent > monthlyBudget.Amount)
+                    {
+                        await _alertService.CreateAlert(transaction.UserId, $"Przekroczyłeś budżet dla kategorii {transaction.Category.Name} o {totalSpent - monthlyBudget.Amount:c}.");
+                    }
+                    else if(monthlyBudget.Amount - totalSpent < 0.1m * monthlyBudget.Amount)
+                    {
+                        await _alertService.CreateAlert(transaction.UserId, $"Masz mniej niż 10% budżetu dla kategorii {transaction.Category.Name}.");
+                    }
+                }
+            }
+
 
             return CreatedAtAction("GetTransaction", new { id = transaction.Id }, new TransactionResponseDto
             {

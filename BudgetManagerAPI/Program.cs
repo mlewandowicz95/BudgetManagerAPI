@@ -75,6 +75,7 @@ namespace BudgetManagerAPI
             builder.Services.AddHostedService<CleanupRevokedTokenService>();
             builder.Services.AddLogging(); // logging
             builder.Services.AddScoped<TokenService>();
+            builder.Services.AddScoped<AlertService>();
             builder.Services.AddScoped<AppDbContext>();
             builder.Services.AddControllers()
                 .AddJsonOptions(options =>

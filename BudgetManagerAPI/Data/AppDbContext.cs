@@ -13,6 +13,7 @@ namespace BudgetManagerAPI.Data
         public virtual DbSet<Goal> Goals { get; set; }
         public virtual DbSet<RevokedToken> RevokedTokens { get; set; }
         public virtual DbSet<MonthlyBudget> MonthlyBudgets { get; set; }
+        public virtual DbSet<Alert> Alerts { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
