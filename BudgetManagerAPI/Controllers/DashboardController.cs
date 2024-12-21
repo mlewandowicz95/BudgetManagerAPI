@@ -9,16 +9,19 @@ using System.Security.Claims;
 
 namespace BudgetManagerAPI.Controllers
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class DashboardController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly ILogger<DashboardController> _logger;
 
 
-        public DashboardController(AppDbContext context)
+        public DashboardController(AppDbContext context, ILogger<DashboardController> logger)
         {
             _context = context;
+            _logger = logger;
         }
 
         private int GetParseUserId()
@@ -34,7 +37,7 @@ namespace BudgetManagerAPI.Controllers
             return parsedUserId;
         }
 
-        [Authorize]
+
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetDashboardSummary()
         {
@@ -99,7 +102,7 @@ namespace BudgetManagerAPI.Controllers
         }
 
 
-        [Authorize]
+
         [HttpGet("dashboard/expenses-by-category")]
         public async Task<IActionResult> GetExpensesByCategory()
         {
@@ -124,7 +127,7 @@ namespace BudgetManagerAPI.Controllers
         }
 
 
-        [Authorize]
+
         [HttpGet("dashboard/balance-per-month")]
         public async Task<IActionResult> GetBalancePerMonth()
         {
@@ -163,7 +166,7 @@ namespace BudgetManagerAPI.Controllers
             return Ok(formattedData);
         }
 
-        [Authorize]
+
         [HttpGet("dashboard/budget-forecast")]
         public async Task<IActionResult> GetBudgetForecast()
         {
@@ -202,6 +205,61 @@ namespace BudgetManagerAPI.Controllers
             };
 
             return Ok(forecast);
+        }
+
+        [HttpGet("financial-indicators")]
+        public async Task<IActionResult> GetFinancialIndicators()
+        {
+            try
+            {
+                var userId = GetParseUserId();
+                if(userId == 0)
+                {
+                    return Unauthorized(new { Message = "Error in UserId" });
+                }
+
+                var transactions = await _context.Transactions
+                    .Where(t => t.UserId == userId)
+                    .ToListAsync();
+
+                if(transactions.Count == 0)
+                {
+                    return Ok(new FinancialIndicatorsDto
+                    {
+                        SavingsPercentage = 0,
+                        ExpensesToIncomeRatio = 0,
+                        AverageMonthlyExpenses = 0,
+                        AverageMonthlyIncome = 0
+                    });
+                }
+
+                var income = transactions.Where(t => t.Type == TransactionType.Income).Sum(t => t.Amount);
+                var expenses = transactions.Where(t => t.Type == TransactionType.Expense).Sum(t => t.Amount);
+
+                var firstTransactionDate = transactions.Min(t => t.Date);
+                var monthsActive = Math.Max(1, (int)((DateTime.UtcNow - firstTransactionDate).TotalDays / 30));
+
+                var averageMonthlyIncome = income / monthsActive;
+                var averageMonthlyExpenses = expenses / monthsActive;
+
+                var savingsPercentage = income > 0 ? ((income - expenses) / income) * 100 : 0;
+                var expensesToIncomeRatio = income > 0 ? (expenses - income) * 100 : 0;
+
+                var indicators = new FinancialIndicatorsDto
+                {
+                    SavingsPercentage = savingsPercentage,
+                    ExpensesToIncomeRatio = expensesToIncomeRatio,
+                    AverageMonthlyExpenses = averageMonthlyExpenses,
+                    AverageMonthlyIncome = averageMonthlyIncome
+                };
+
+                return Ok(indicators);
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while fetching financial indicators.");
+                return StatusCode(500, new { Message = "An error occurred while processing your request." });
+            }
         }
 
         private decimal CalculateRecurringAmount(Transaction transaction, DateTime startDate, DateTime endDate)
