@@ -1,15 +1,17 @@
-﻿using BudgetManagerAPI.Data;
+﻿using BudgetManagerAPI.Constants;
+using BudgetManagerAPI.Data;
 using BudgetManagerAPI.DTO;
 using BudgetManagerAPI.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using System.Security.Claims;
 
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
 
 namespace BudgetManagerAPI.Controllers
 {
-    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class CategoryController : ControllerBase
@@ -25,14 +27,22 @@ namespace BudgetManagerAPI.Controllers
 
         // GET: api/Category
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<CategoryResponseDto>>> GetCategories()
+        [Authorize]
+        public async Task<IActionResult> GetCategories()
         {
             try
             {
-                _logger.LogInformation("Fetching all categories.");
+                var userId = GetParseUserId();
 
-                // Pobranie kategorii i mapowanie na DTO
-                var categories = await _context.Categories
+                IQueryable<Category> query = _context.Categories;
+
+                if (!User.IsInRole(Roles.Admin))
+                {
+                    // Ograniczenie widoczności dla Pro i User
+                    query = query.Where(c => c.UserId == null || c.UserId == userId);
+                }
+
+                var categories = await query
                     .Select(category => new CategoryResponseDto
                     {
                         Id = category.Id,
@@ -55,14 +65,20 @@ namespace BudgetManagerAPI.Controllers
 
         // GET: api/Category/2
         [HttpGet("{id}")]
-        public async Task<ActionResult<CategoryResponseDto>> GetCategory(int id)
+        [Authorize]
+        public async Task<IActionResult> GetCategory(int id)
         {
             try
             {
                 var category = await _context.Categories.FindAsync(id);
-                if(category == null)
+                if (category == null)
                 {
                     return NotFound(new { Message = $"Category with ID {id} not found." });
+                }
+
+                if(!User.IsInRole(Roles.Admin) && category.UserId == null)
+                {
+                    return Forbid("Only admin can see not mine category.");
                 }
 
                 CategoryResponseDto categoryResponseDto = new CategoryResponseDto
@@ -74,7 +90,7 @@ namespace BudgetManagerAPI.Controllers
 
                 return Ok(categoryResponseDto);
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
 
                 _logger.LogError($"Error in GetCatergory(int id): {ex.Message}");
@@ -83,15 +99,48 @@ namespace BudgetManagerAPI.Controllers
             }
         }
 
+
         // POST: api/Category
-        [Authorize(Roles = "Admin,Pro")]
+        [Authorize(Roles = $"{Roles.Admin},{Roles.Pro}")]
         [HttpPost]
         public async Task<ActionResult<Category>> PostCategory([FromBody] CategoryRequestDto categoryRequestDto)
         {
+            var userId = GetParseUserId();
+            if (userId == 0)
+            {
+                return Unauthorized(new { Message = "Error user id." });
+            }
+
+
+
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
             }
+
+            if(User.IsInRole(Roles.Pro) && categoryRequestDto.UserId != categoryRequestDto.UserId)
+            {
+                return Forbid("Pro users can only create categories for themselves.");
+            }
+
+            if(User.IsInRole(Roles.Admin) && categoryRequestDto.UserId == null)
+            {
+                var globalCategory = new Category
+                {
+                    Name = categoryRequestDto.Name,
+                    UserId = null,
+                };
+
+                _context.Categories.Add(globalCategory);
+                await _context.SaveChangesAsync();
+                return CreatedAtAction("GetCategory", new { id = globalCategory.Id }, new CategoryResponseDto
+                {
+                    Id = globalCategory.Id,
+                    Name = globalCategory.Name,
+                    UserId = globalCategory.UserId,
+                });
+            }
+
 
             var category = new Category
             {
@@ -102,24 +151,33 @@ namespace BudgetManagerAPI.Controllers
             _context.Categories.Add(category);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction("GetCategory", new {id = category.Id}, new CategoryResponseDto
+            return CreatedAtAction("GetCategory", new { id = category.Id }, new CategoryResponseDto
             {
                 Id = category.Id,
                 Name = category.Name,
-                UserId =category.UserId
+                UserId = category.UserId
             });
         }
-        // PUT: api/Category/2
-        [HttpPut("{id}")]
-        [Authorize(Roles = "Admin,Pro")]
-        public async Task<IActionResult> PutCategory(int id, [FromBody] CategoryRequestDto dto)
-        {
 
-            if (id <= 0)
+        private int GetParseUserId()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
             {
-                return BadRequest(new { Message = "Invalid ID." });
+                return 0;
             }
 
+
+            int parsedUserId = int.Parse(userId);
+            return parsedUserId;
+        }
+
+        // PUT: api/Category/2
+        [HttpPut("{id}")]
+        [Authorize(Roles = $"{Roles.Admin},{Roles.Pro}")]
+        public async Task<IActionResult> PutCategory(int id, [FromBody] CategoryRequestDto dto)
+        {
+            var userId = GetParseUserId();
 
             var category = await _context.Categories.FindAsync(id);
             if (category == null)
@@ -128,8 +186,19 @@ namespace BudgetManagerAPI.Controllers
             }
 
 
-            category.Name = dto.Name;
-            category.UserId = dto.UserId;
+            if(User.IsInRole(Roles.Admin))
+            {
+                category.Name = dto.Name;
+                category.UserId = dto.UserId;
+            }
+            else if(category.UserId == userId)
+            {
+                category.Name = dto.Name;
+            }
+            else
+            {
+                return Forbid("You can only edit your own categories.");
+            }
 
             try
             {
@@ -151,10 +220,6 @@ namespace BudgetManagerAPI.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> DeleteCategory(int id)
         {
-            if (id <= 0)
-            {
-                return BadRequest(new { Message = "Invalid ID." });
-            }
 
             var category = await _context.Categories.FindAsync(id);
             if (category == null)
