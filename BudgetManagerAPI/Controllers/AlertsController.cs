@@ -21,7 +21,7 @@ namespace BudgetManagerAPI.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAlerts([FromQuery] bool onlyUnread = false)
+        public async Task<IActionResult> GetUserAlerts([FromQuery] bool onlyUnread = false)
         {
             var userId = GetParseUserId();
             if(userId == 0)

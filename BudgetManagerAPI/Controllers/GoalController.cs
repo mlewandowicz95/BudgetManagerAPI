@@ -23,13 +23,15 @@ namespace BudgetManagerAPI.Controllers
 
         // GET: api/Goal
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<GoalResponseDto>>> GetGoals()
+        public async Task<ActionResult<IEnumerable<GoalResponseDto>>> GetUserGoals()
         {
+            var userId = GetParseUserId();
             try
             {
                 _logger.LogInformation("Fetching all goals.");
 
                 var goals = await _context.Goals
+                    .Where(g => g.UserId == userId)
                     .Select(goal => new GoalResponseDto
                     {
                         Id = goal.Id,
@@ -54,12 +56,19 @@ namespace BudgetManagerAPI.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<GoalResponseDto>> GetGoal(int id)
         {
+            var userId = GetParseUserId();
             try
             {
                 var goal = await _context.Goals.FindAsync(id);
                 if(goal == null)
                 {
                     return NotFound(new { Message = $"Goal with ID {id} not found." });
+                }
+
+                if (goal.UserId != userId)
+                {
+                    _logger.LogWarning("Unauthorized access to goal with ID {id}.", id);
+                    return Forbid();
                 }
 
                 GoalResponseDto goalResponseDto = new GoalResponseDto
@@ -85,6 +94,7 @@ namespace BudgetManagerAPI.Controllers
         [HttpPost]
         public async Task<ActionResult<GoalResponseDto>> PostGoal([FromBody] GoalRequestDto goalRequestDto)
         {
+            var userId = GetParseUserId();
 
             if(!ModelState.IsValid)
             {
@@ -96,7 +106,7 @@ namespace BudgetManagerAPI.Controllers
             {
                 var goal = new Goal
                 {
-                    UserId = goalRequestDto.UserId,
+                    UserId = userId,
                     CurrentProgress = goalRequestDto.CurrentProgress,
                     DueDate = goalRequestDto.DueDate,
                     Name = goalRequestDto.Name,
@@ -112,10 +122,10 @@ namespace BudgetManagerAPI.Controllers
                     Id = goal.Id,
                     Name = goal.Name,
                     CurrentProgress = goal.CurrentProgress,
-                    DueDate = goalRequestDto.DueDate,
+                    DueDate = goal.DueDate,
                     CreatedAt = goal.CreatedAt,
-                    TargetAmount = goalRequestDto.TargetAmount,
-                    UserId = goalRequestDto.UserId
+                    TargetAmount = goal.TargetAmount,
+                    UserId = goal.UserId
                 });
             }
             catch(Exception ex)
@@ -127,8 +137,10 @@ namespace BudgetManagerAPI.Controllers
 
         // PUT: api/Goal/34
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutGoal(int id, [FromBody] GoalRequestDto goalRequestDto)
+        public async Task<IActionResult> UpdateGoal(int id, [FromBody] GoalRequestDto goalRequestDto)
         {
+            var userId = GetParseUserId();
+
             if(id <= 0)
             {
                 _logger.LogError("Invalid ID");
@@ -141,7 +153,13 @@ namespace BudgetManagerAPI.Controllers
                 return NotFound(new { Message = $"Goal with ID {id} not found." });
             }
 
-            goal.UserId = goalRequestDto.UserId;
+            if (goal.UserId != userId)
+            {
+                _logger.LogWarning("Unauthorized edit attempt for goal with ID {id}.", id);
+                return Forbid();
+            }
+
+            goal.UserId = userId;
             goal.Name = goalRequestDto.Name;
             goal.TargetAmount = goalRequestDto.TargetAmount;
             goal.CurrentProgress = goalRequestDto.CurrentProgress;
@@ -164,8 +182,10 @@ namespace BudgetManagerAPI.Controllers
 
         // DELETE: api/Goal/35
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteGoal(int id)
+        public async Task<IActionResult> RemoveGoal(int id)
         {
+            var userId = GetParseUserId();
+
             if (id <= 0)
             {
                 return BadRequest(new { Message = "Invalid ID" });
@@ -175,6 +195,12 @@ namespace BudgetManagerAPI.Controllers
             if (goal == null)
             {
                 return NotFound(new { Message = "Goal with ID {id} not found.", id });
+            }
+
+            if (goal.UserId != userId)
+            {
+                _logger.LogWarning("Unauthorized delete attempt for goal with ID {id}.", id);
+                return Forbid();
             }
 
             _context.Goals.Remove(goal);
