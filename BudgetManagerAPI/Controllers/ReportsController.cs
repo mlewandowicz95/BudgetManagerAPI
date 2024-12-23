@@ -13,7 +13,7 @@ namespace BudgetManagerAPI.Controllers
     [Authorize]
     [ApiController]
     [Route("api/reports")]
-    public class ReportsController : ControllerBase
+    public class ReportsController : BaseController
     {
         private readonly IPdfReportService _pdfReportService;
         private readonly AppDbContext _context;
@@ -98,20 +98,6 @@ namespace BudgetManagerAPI.Controllers
                 }
             };
             return Ok(reports);
-        }
-
-
-        private int GetParseUserId()
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId))
-            {
-                return 0;
-            }
-
-
-            int parsedUserId = int.Parse(userId);
-            return parsedUserId;
         }
     }
 }

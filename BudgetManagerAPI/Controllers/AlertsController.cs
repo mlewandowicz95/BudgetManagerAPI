@@ -9,7 +9,7 @@ namespace BudgetManagerAPI.Controllers
     [Authorize]
     [ApiController]
     [Route("api/alerts")]
-    public class AlertsController : ControllerBase
+    public class AlertsController : BaseController
     {
         private readonly AlertService _alertService;
         private readonly ILogger<AlertsController> _logger;
@@ -69,19 +69,6 @@ namespace BudgetManagerAPI.Controllers
                 _logger.LogError(ex, "An error occured while marking alerts as read.");
                 return StatusCode(500, new { Message = "An error occured while processing your request." });
             }
-        }
-
-        private int GetParseUserId()
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId))
-            {
-                return 0;
-            }
-
-
-            int parsedUserId = int.Parse(userId);
-            return parsedUserId;
         }
     }
 }

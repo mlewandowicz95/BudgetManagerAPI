@@ -1,179 +1,199 @@
-﻿using BudgetManagerAPI.Data;
+﻿using BudgetManagerAPI.Constants;
+using BudgetManagerAPI.Data;
 using BudgetManagerAPI.DTO;
 using BudgetManagerAPI.Models;
+using BudgetManagerAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Security.Claims;
 
 namespace BudgetManagerAPI.Controllers
 {
-    [Authorize(Roles = "Admin")]
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
-    public class UserController : ControllerBase
+    public class UserController : BaseController
     {
         private readonly AppDbContext _context;
+        private readonly EmailService _emailService;
         private readonly ILogger<UserController> _logger;
 
-        public UserController(AppDbContext context, ILogger<UserController> logger)
+        public UserController(AppDbContext context, EmailService emailService, ILogger<UserController> logger)
         {
             _context = context;
+            _emailService = emailService;
             _logger = logger;
         }
 
+        // [HttpGet("profile")] – Pobierz dane zalogowanego użytkownika.
+        //  [HttpPut("profile/change-password")] – Zmień hasło zalogowanego użytkownika.
+        //  [HttpPut("profile/email")] – Zmień hasło zalogowanego użytkownika.
 
-        // GET: api/User
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<UserResponseDto>>> GetUsers()
+
+        // GET: api/User/5
+        [HttpGet("profile")]
+        public async Task<ActionResult<UserResponseDto>> GetUserProfile()
         {
+            var userId = GetParseUserId();
+
+            if (userId == 0)
+            {
+                _logger.LogWarning("Invalid user ID in GetUserProfile.");
+                return Unauthorized(new { Message = "Invalid UserId." });
+            }
+
             try
             {
-                _logger.LogInformation("Fetching all users");
+                var user = await _context.Users
+            .Where(u => u.Id == userId)
+            .Select(u => new UserResponseDto
+            {
+                Id = u.Id,
+                Email = u.Email,
+                Role = u.Role
+            })
+            .FirstOrDefaultAsync();
 
-                var users = await _context.Users
-                    .Select(user => new UserResponseDto
-                    {
-                        Id = user.Id,
-                        Email = user.Email,
-                        Role = user.Role,
-                    })
-                    .ToListAsync();
+                if (user == null)
+                {
+                    _logger.LogWarning("User with ID {UserId} not found.", userId);
+                    return NotFound(new { Message = "User not found." });
+                }
 
-                _logger.LogInformation($"Succesufully fetch {users.Count} users");
-                return Ok(users);
+                return Ok(user);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occured while fetching users.");
-                return StatusCode(500, new { Message = "An error occured while processing your request." });
+
+                _logger.LogError("Error in GetUser(int id): {ex.Message}", ex.Message);
+                return StatusCode(500, new { Message = "An error occured while processing your request" });
             }
         }
 
-        // GET: api/User/5
-        [HttpGet("{id}")]
-        public async Task<ActionResult<UserResponseDto>> GetUser(int id)
+
+        [HttpPost("profile/change-password")]
+        public async Task<IActionResult> ChangePassword(ChangePasswordRequestDto changePasswordRequestDto)
         {
-            try
-            {
-                var user = await _context.Users.FindAsync(id);
-                if (user == null)
-                {
-                    return NotFound(new {Message = $"User with ID {id} not found"});
-                }
-
-                UserResponseDto userResponseDto = new UserResponseDto()
-                {
-                    Id = user.Id,
-                    Email = user.Email,
-                    Role = user.Role,
-
-                };
-
-                return Ok(userResponseDto);
-            }
-            catch(Exception ex)
-            {
-
-                _logger.LogError($"Error in GetUser(int id): {ex.Message}");
-                return StatusCode(500, "An error occured while processing your request");
-            }
-        }
-
-        // POST: api/User
-        
-        [HttpPost]
-        public async Task<ActionResult<UserResponseDto>> PostUser(UserRequestDto userRequestDto)
-        {
-
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
             }
 
-            var user = new User
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
             {
-                Email = userRequestDto.Email,
-                PasswordHash = userRequestDto.Password,
-            };
+                return Unauthorized(new { Message = "User is not authorized." });
+            }
 
+            var user = await _context.Users.FindAsync(int.Parse(userId));
+            if (user == null)
+            {
+                return NotFound(new { Message = "User not found." });
+            }
 
+            var isPasswordValid = BCrypt.Net.BCrypt.Verify(changePasswordRequestDto.CurrentPassword, user.PasswordHash);
+            if (!isPasswordValid)
+            {
+                return BadRequest(new { Message = "Current password is incorrect." });
+            }
 
-            _context.Users.Add(user);
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(changePasswordRequestDto.NewPassword);
             await _context.SaveChangesAsync();
 
+            return Ok(new { Message = "Password has been changed successfully." });
 
-
-            return CreatedAtAction("GetUser", new {id = user.Id}, new UserResponseDto
-            {
-                Id=user.Id,
-                Email= user.Email,
-                Role = user.Role,
-
-            });
         }
 
-        // PUT: api/User/5
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutUser(int id, [FromBody] UserRequestDto userRequestDto)
+        [HttpPut("profile/email")]
+        public async Task<IActionResult> RequestEmailChange([FromBody] UpdateEmailDto dto)
         {
-            if(id <= 0)
-            {
-                return BadRequest(new { Message = "Invalid ID." });
-            }
-            var user = await _context.Users.FindAsync(id);
-            if(user == null)
-            {
-                return NotFound(new { Message = $"User with ID {id} not found" });
-            }
+            var userId = GetParseUserId();
 
 
-            _context.Entry(user).State = EntityState.Modified;
-            user.Email = userRequestDto.Email;
-            user.PasswordHash = userRequestDto.Password;
-            try
+            if (userId == 0)
             {
-                await _context.SaveChangesAsync();
-                _logger.LogInformation("User with ID {Id} updated successfully.", id);
-
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                _logger.LogWarning("Concurrency conflict while updating user with ID {Id}.", id);
-                return StatusCode(409, new { Message = "Concurrency conflict occurred while updating the user." });
-            }
-            return NoContent();
-        }
-
-        //DELETE: api/User/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteUser(int id)
-        {
-            if (id <= 0)
-            {
-                return BadRequest(new { Message = "Invalid ID" });
+                _logger.LogWarning("Invalid user ID in RequestEmailChange.");
+                return Unauthorized(new { Message = "Invalid UserId." });
             }
 
-            var user = await _context.Users.FindAsync(id);
-            if(user == null)
+
+            var emailExistsInDb = await _context.Users.FirstOrDefaultAsync(e => e.Email == dto.NewEmail);
+            if(emailExistsInDb != null)
             {
-                _logger.LogWarning($"User with ID {id} not found for deletion");
-                return NotFound(new { Message = $"User with ID {id} not found" });
+                return BadRequest(new { Message = "Email is already exists in database." });
             }
 
-            _context.Users.Remove(user);
+
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null)
+            {
+                return NotFound(new { Message = "User not found." });
+            }
+
+            
 
             try
             {
+                var token = Guid.NewGuid().ToString("N");
+                user.EmailChangeToken = token;
+                user.NewEmail = dto.NewEmail;
+                user.EmailChangeTokenExpiry = DateTime.UtcNow.AddHours(24);
+
                 await _context.SaveChangesAsync();
-                _logger.LogInformation("User with ID {id} deleted successfully", id);
+
+                var confirmationLink = Url.Action(
+                    nameof(RequestEmailChange),
+                    "Auth",
+                    new { token = user.EmailChangeToken },
+                    protocol: HttpContext.Request.Scheme);
+
+
+
+                await _emailService.SendEmailAsync(dto.NewEmail, "Confirm Email Change",
+                     $"Click the link to confirm your email change: {confirmationLink}");
+
+                return Ok(new { Message = "Confirmation email sent." });
             }
             catch(Exception ex)
             {
-                _logger.LogError(ex, "An error occured while deleting user with ID {id}", id);
+
+                _logger.LogError("Error in RequestEmailChange(UpdateEmailDto dto): {ex.Message}", ex.Message);
                 return StatusCode(500, new { Message = "An error occured while processing your request" });
             }
-            return NoContent();
+
+        }
+
+        [HttpGet("profile/email/confirm")]
+        public async Task<IActionResult> ConfirmEmailChange([FromQuery] string token)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.EmailChangeToken == token);
+
+            if (user == null || user.EmailChangeTokenExpiry < DateTime.UtcNow)
+            {
+                return BadRequest(new { Message = "Invalid or expired token." });
+            }
+
+            try
+            {
+
+                user.Email = user.NewEmail;
+                user.NewEmail = string.Empty;
+                user.EmailChangeToken = string.Empty;
+                user.EmailChangeTokenExpiry = null;
+
+                await _context.SaveChangesAsync();
+
+                return Ok(new { Message = "Email address updated successfully." });
+            }
+            catch (Exception ex)
+            {
+
+                _logger.LogError("Error in ConfirmEmailChange(string token): {ex.Message}", ex.Message);
+                return StatusCode(500, new { Message = "An error occured while processing your request" });
+            }
+
         }
     }
 }

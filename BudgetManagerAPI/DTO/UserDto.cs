@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using BudgetManagerAPI.Constants;
+using System.ComponentModel.DataAnnotations;
 
 namespace BudgetManagerAPI.DTO
 {
@@ -16,6 +17,8 @@ namespace BudgetManagerAPI.DTO
         [Required]
         [Compare("Password", ErrorMessage = "Passwords do not match.")]
         public string ConfirmPassword { get; set; }
+
+        public string Role { get; set; } = Roles.User;
 
     }
 

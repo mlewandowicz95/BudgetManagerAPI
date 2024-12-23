@@ -12,7 +12,7 @@ namespace BudgetManagerAPI.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class TransactionController : ControllerBase
+    public class TransactionController : BaseController
     {
         private readonly AppDbContext _context;
         private readonly ILogger<TransactionController> _logger;
@@ -23,19 +23,6 @@ namespace BudgetManagerAPI.Controllers
             _context = context;
             _logger = logger;
             _alertService = alertService;
-        }
-
-        private int GetParseUserId()
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId))
-            {
-                return 0;
-            }
-
-
-            int parsedUserId = int.Parse(userId);
-            return parsedUserId;
         }
 
         //GET: api/Transaction

@@ -2,6 +2,7 @@
 using BudgetManagerAPI.Data;
 using BudgetManagerAPI.DTO;
 using BudgetManagerAPI.DTO.Admin;
+using BudgetManagerAPI.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +13,7 @@ namespace BudgetManagerAPI.Controllers
     [Authorize(Roles = Roles.Admin)]
     [ApiController]
     [Route("api/[controller]")]
-    public class AdminController : ControllerBase
+    public class AdminController : BaseController
     {
         private readonly AppDbContext _context;
         private readonly ILogger<AdminController> _logger;
@@ -25,9 +26,9 @@ namespace BudgetManagerAPI.Controllers
         }
 
         [HttpGet("users")]
-        public async Task<IActionResult> GetUsers(
+        public async Task<IActionResult> GetAllUsers(
             [FromQuery] bool? isActive,
-            [FromQuery] string roles = "{wszystkie}",
+            [FromQuery] IEnumerable<string> roles,
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 20,
             [FromQuery] string sortBy = "email",
@@ -52,24 +53,21 @@ namespace BudgetManagerAPI.Controllers
                         query = query.Where(u => !u.IsActive);
                 }
 
-
-                if (roles != "{wszystkie}")
+                if (roles != null && roles.Any())
                 {
-                    switch (roles.ToLower())
+                    var allowedRoles = Roles.All.Select(role => role.ToLower()).ToHashSet();
+
+                    var filteredRoles = roles
+                        .Select(role => role.ToLower())
+                        .Where(role => allowedRoles.Contains(role))
+                        .ToHashSet();
+
+                    if (filteredRoles.Count != 0)
                     {
-                        case "admin":
-                            query = query.Where(u => u.Role.ToLower() == "admin");
-                            break;
-
-                        case "pro":
-                            query = query.Where(u => u.Role.ToLower() == "pro");
-                            break;
-
-                        case "user":
-                            query = query.Where(u => u.Role.ToLower() == "user");
-                            break;
+                        query = query.Where(u => filteredRoles.Contains(u.Role.ToLower()));
                     }
                 }
+
 
                 if (!string.IsNullOrEmpty(sortBy))
                 {
@@ -112,7 +110,7 @@ namespace BudgetManagerAPI.Controllers
 
                 return Ok(result);
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred while fetching transactions.");
                 return StatusCode(500, new { Message = "An error occurred while processing your request." });
@@ -123,9 +121,14 @@ namespace BudgetManagerAPI.Controllers
         public async Task<IActionResult> UpdateUserRole(int id, [FromBody] UpdateRoleDto roleDto)
         {
             var user = await _context.Users.FindAsync(id);
-            if(user == null)
+            if (user == null)
             {
                 return NotFound(new { Message = "User with ID {id} not found.", id });
+            }
+
+            if (!Roles.All.Contains(roleDto.Role))
+            {
+                return BadRequest(new { Message = "Invalid role specified." });
             }
 
             user.Role = roleDto.Role;
@@ -142,6 +145,88 @@ namespace BudgetManagerAPI.Controllers
             }
         }
 
+        // POST: api/User
+
+        [HttpPost]
+        public async Task<ActionResult<UserResponseDto>> PostUser(UserRequestDto userRequestDto)
+        {
+
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var user = new User
+            {
+                Email = userRequestDto.Email,
+                PasswordHash = userRequestDto.Password,
+                Role = userRequestDto.Role,
+            };
+
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+
+
+
+            return CreatedAtAction("GetUser", new { id = user.Id }, new UserResponseDto
+            {
+                Id = user.Id,
+                Email = user.Email,
+                Role = user.Role,
+
+            });
+        }
+
+        // PUT: api/User/5
+        [HttpPut("{id}")]
+        public async Task<IActionResult> PutUser(int id, [FromBody] UpdateUserDto updateUserDto)
+        {
+            // Sprawdzenie, czy użytkownik istnieje
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+            {
+                return NotFound(new { Message = $"User with ID {id} not found." });
+            }
+
+            // Walidacja: Predefiniowani użytkownicy nie mogą być edytowani
+            if (id >= 1 && id <= 3)
+            {
+                return BadRequest(new { Message = "Predefined users cannot be edited." });
+            }
+
+            // Aktualizacja pól
+            if (!string.IsNullOrEmpty(updateUserDto.Email))
+            {
+                user.Email = updateUserDto.Email;
+            }
+
+            if (!string.IsNullOrEmpty(updateUserDto.Role))
+            {
+                // Walidacja roli
+                if (!Roles.All.Contains(updateUserDto.Role))
+                {
+                    return BadRequest(new { Message = $"Invalid role. Allowed roles are: {string.Join(", ", Roles.All)}" });
+                }
+
+                user.Role = updateUserDto.Role;
+            }
+
+            try
+            {
+                await _context.SaveChangesAsync();
+                return NoContent();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Conflict(new { Message = "Concurrency conflict occurred while updating the user." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while updating user with ID {Id}.", id);
+                return StatusCode(500, new { Message = "An error occurred while processing your request." });
+            }
+        }
+
         [HttpPatch("{id}/change-is-active")]
         public async Task<IActionResult> ChangeIsActive(int id, ChangeActiveUserDto dto)
         {
@@ -149,6 +234,11 @@ namespace BudgetManagerAPI.Controllers
             if (user == null)
             {
                 return NotFound(new { Message = "User with ID {id} not found.", id });
+            }
+
+            if (id == GetParseUserId())
+            {
+                return BadRequest(new { Message = "You cannot deactivate yourself." });
             }
 
             user.IsActive = dto.IsActive;
@@ -168,44 +258,39 @@ namespace BudgetManagerAPI.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteUser(int id)
         {
+            // Walidacja: Sprawdzenie, czy użytkownik istnieje
             var user = await _context.Users.FindAsync(id);
             if (user == null)
             {
-                return NotFound(new { Message = "User with ID {id} not found.", id });
+                return NotFound(new { Message = $"User with ID {id} not found." });
             }
 
+            // Walidacja: Predefiniowani użytkownicy nie mogą być usuwani
             if (id >= 1 && id <= 3)
             {
-                return BadRequest("Prefedined users cannot be deleted from database.");
+                return BadRequest(new { Message = "Predefined users cannot be deleted." });
             }
-           
 
-           
             try
             {
+                // Usuwanie użytkownika
                 _context.Users.Remove(user);
                 await _context.SaveChangesAsync();
 
-                return Ok("User was deleted.");
+                _logger.LogInformation("User with ID {Id} deleted successfully.", id);
+                return Ok(new { Message = $"User with ID {id} has been deleted successfully." });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occurred while delete user active.");
-                return StatusCode(500, new { Message = "An error occurred while processing your request." });
+                // Obsługa błędów
+                _logger.LogError(ex, "An error occurred while trying to delete user with ID {Id}.", id);
+                return StatusCode(500, new { Message = "An error occurred while processing your request. Please try again later." });
             }
         }
 
-        private int GetParseUserId()
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId))
-            {
-                return 0;
-            }
 
 
-            int parsedUserId = int.Parse(userId);
-            return parsedUserId;
-        }
+
+
     }
 }

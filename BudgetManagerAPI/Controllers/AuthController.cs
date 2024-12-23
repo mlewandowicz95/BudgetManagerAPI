@@ -16,7 +16,7 @@ namespace BudgetManagerAPI.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class AuthController : ControllerBase
+    public class AuthController : BaseController
     {
         private readonly AppDbContext _context;
         private readonly TokenService _tokenService;
@@ -85,6 +85,8 @@ namespace BudgetManagerAPI.Controllers
             {
                 Id = user.Id,
                 Email = user.Email,
+                Role = user.Role,
+
             });
         }
 
@@ -325,41 +327,6 @@ namespace BudgetManagerAPI.Controllers
             {
                 return null; // Jeśli token jest nieprawidłowy
             }
-        }
-
-
-        [Authorize]
-        [HttpPost("change-password")]
-        public async Task<IActionResult> ChangePassword(ChangePasswordRequestDto changePasswordRequestDto)
-        {
-            if(!ModelState.IsValid)
-            {
-                return BadRequest(ModelState);
-            }
-
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId))
-            {
-                return Unauthorized(new { Message = "User is not authorized." });
-            }
-
-            var user = await _context.Users.FindAsync(int.Parse(userId));
-            if (user == null)
-            {
-                return NotFound(new { Message = "User not found." });
-            }
-
-            var isPasswordValid = BCrypt.Net.BCrypt.Verify(changePasswordRequestDto.CurrentPassword, user.PasswordHash);
-            if(!isPasswordValid)
-            {
-                return BadRequest(new { Message = "Current password is incorrect." });
-            }
-
-            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(changePasswordRequestDto.NewPassword);
-            await _context.SaveChangesAsync();
-
-            return Ok(new { Message = "Password has been changed successfully." });
-
         }
 
     }

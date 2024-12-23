@@ -11,7 +11,7 @@ namespace BudgetManagerAPI.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class MonthlyBudgetController : ControllerBase
+    public class MonthlyBudgetController : BaseController
     {
         private readonly AppDbContext _context;
         private readonly ILogger<MonthlyBudgetController> _logger;
@@ -115,19 +115,6 @@ namespace BudgetManagerAPI.Controllers
                 _logger.LogError(ex, "An error occurred while fetching the budget status.");
                 return StatusCode(500, new { Message = "An error occurred while processing your request." });
             }
-        }
-
-        private int GetParseUserId()
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId))
-            {
-                return 0;
-            }
-
-
-            int parsedUserId = int.Parse(userId);
-            return parsedUserId;
         }
     }
 }

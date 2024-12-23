@@ -12,7 +12,7 @@ namespace BudgetManagerAPI.Controllers
     [Authorize]
     [Route("api/[controller]")]
     [ApiController]
-    public class DashboardController : ControllerBase
+    public class DashboardController : BaseController
     {
         private readonly AppDbContext _context;
         private readonly ILogger<DashboardController> _logger;
@@ -22,19 +22,6 @@ namespace BudgetManagerAPI.Controllers
         {
             _context = context;
             _logger = logger;
-        }
-
-        private int GetParseUserId()
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId))
-            {
-                return 0;
-            }
-
-
-            int parsedUserId = int.Parse(userId);
-            return parsedUserId;
         }
 
 

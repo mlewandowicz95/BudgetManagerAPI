@@ -14,7 +14,7 @@ namespace BudgetManagerAPI.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class CategoryController : ControllerBase
+    public class CategoryController : BaseController
     {
         private readonly AppDbContext _context;
         private readonly ILogger<CategoryController> _logger;
@@ -159,18 +159,6 @@ namespace BudgetManagerAPI.Controllers
             });
         }
 
-        private int GetParseUserId()
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId))
-            {
-                return 0;
-            }
-
-
-            int parsedUserId = int.Parse(userId);
-            return parsedUserId;
-        }
 
         // PUT: api/Category/2
         [HttpPut("{id}")]
@@ -215,34 +203,6 @@ namespace BudgetManagerAPI.Controllers
         }
 
 
-        // DELETE: api/Category/2
-        [HttpDelete("{id}")]
-        [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> DeleteCategory(int id)
-        {
-
-            var category = await _context.Categories.FindAsync(id);
-            if (category == null)
-            {
-                _logger.LogWarning("Category with ID {Id} not found for deletion.", id);
-                return NotFound(new { Message = $"Category with ID {id} not found." });
-            }
-
-            _context.Categories.Remove(category);
-
-            try
-            {
-                await _context.SaveChangesAsync();
-                _logger.LogInformation("Category with ID {Id} deleted successfully.", id);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "An error occurred while deleting category with ID {Id}.", id);
-                return StatusCode(500, new { Message = "An error occurred while processing your request." });
-            }
-
-            return NoContent();
-        }
 
 
     }

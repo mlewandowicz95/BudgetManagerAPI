@@ -10,7 +10,7 @@ namespace BudgetManagerAPI.Controllers
     [Authorize]
     [Route("api/[controller]")]
     [ApiController]
-    public class GoalController : ControllerBase
+    public class GoalController : BaseController
     {
         private readonly AppDbContext _context;
         private readonly ILogger<GoalController> _logger;
