@@ -6,7 +6,7 @@ namespace BudgetManagerAPI.Controllers
 {
     public class BaseController : ControllerBase
     {
-        public int GetParseUserId()
+        protected int GetParseUserId()
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrEmpty(userId))

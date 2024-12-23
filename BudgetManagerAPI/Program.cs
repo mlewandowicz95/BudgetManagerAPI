@@ -30,9 +30,7 @@ namespace BudgetManagerAPI
             builder.Logging.AddConsole();
             builder.Logging.AddDebug();
             // builder.Logging.AddFile("Logs/myapp-{Date}.txt"); - wymagany Serilog
-            // Rejestracja konfiguracji JwtSettings
-            //   builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
-            // builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<JwtSettings>>().Value);
+
             var secretKey = builder.Configuration["JwtSettings:SecretKey"];
 
 
