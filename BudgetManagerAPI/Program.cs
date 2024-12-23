@@ -121,12 +121,12 @@ namespace BudgetManagerAPI
         }
     });
             });
-            foreach (var service in builder.Services)
-            {
-                Console.WriteLine($"{service.ServiceType.FullName} -> {service.Lifetime}");
-            }
-            var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-            Console.WriteLine($"Connection String: {connectionString}");
+            //foreach (var service in builder.Services)
+            //{
+            //    Console.WriteLine($"{service.ServiceType.FullName} -> {service.Lifetime}");
+            //}
+            //var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+            //Console.WriteLine($"Connection String: {connectionString}");
 
 
             var app = builder.Build();
@@ -145,7 +145,7 @@ namespace BudgetManagerAPI
             app.UseMiddleware<TokenRevocationMiddleware>();
             app.Use(async (context, next) =>
             {
-                Console.WriteLine($"Incoming request: {context.Request.Method} {context.Request.Path}");
+             //   Console.WriteLine($"Incoming request: {context.Request.Method} {context.Request.Path}");
                 await next.Invoke();
             });
             app.MapControllers();
