@@ -33,6 +33,16 @@ namespace BudgetManagerAPI
 
             var secretKey = builder.Configuration["JwtSettings:SecretKey"];
 
+            // CORS
+            builder.Services.AddCors(options =>
+            {
+                options.AddDefaultPolicy(policy =>
+                {
+                    policy.WithOrigins("http://localhost:8080", "http://127.0.0.1:8080")
+                        .AllowAnyHeader()
+                        .AllowAnyMethod();
+                });
+            });
 
             // Rejestracja konfiguracji JwtSettings
             builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
@@ -137,6 +147,8 @@ namespace BudgetManagerAPI
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
+
+            app.UseCors();
 
             app.UseHttpsRedirection();
 
