@@ -34,71 +34,93 @@ namespace BudgetManagerAPI.Controllers
             [FromQuery] string sortBy = "email",
             [FromQuery] string sortOrder = "asc")
         {
+            // Weryfikacja UserId
             var userId = GetParseUserId();
             if (userId == 0)
             {
-                _logger.LogError("Error in UserId.");
-                return Unauthorized(new { Message = "Error in UserId." });
+                _logger.LogError("Błąd w UserId.");
+                return Unauthorized(new { Message = "Błąd w UserId." });
             }
 
-            // do zastanowienia czy potrzebuje info o naszym uzyytkowniku(adminie) zalogowanym.
             try
             {
+                _logger.LogInformation("Rozpoczęcie pobierania użytkowników. Parametry: isActive={isActive}, roles={roles}, page={page}, pageSize={pageSize}, sortBy={sortBy}, sortOrder={sortOrder}",
+                    isActive, roles, page, pageSize, sortBy, sortOrder);
+
+                // Rozpoczęcie budowy zapytania
                 var query = _context.Users.AsQueryable();
-                if (isActive != null)
+                _logger.LogInformation("Początkowe zapytanie: {query}", query.ToQueryString());
+
+                // Filtrowanie po aktywności użytkowników
+                if (isActive.HasValue)
                 {
-                    if (isActive == true)
-                        query = query.Where(u => u.IsActive);
-                    else
-                        query = query.Where(u => !u.IsActive);
+                    query = isActive.Value
+                        ? query.Where(u => u.IsActive)
+                        : query.Where(u => !u.IsActive);
+                    _logger.LogInformation("Zapytanie po filtrze isActive={isActive}: {query}", isActive, query.ToQueryString());
                 }
 
+                // Filtrowanie po rolach
                 if (roles != null && roles.Any())
                 {
-                    var allowedRoles = Roles.All.Select(role => role.ToLower()).ToHashSet();
+                    var filteredRoles = roles.Where(role => Roles.All.Contains(role)).ToHashSet();
 
-                    var filteredRoles = roles
-                        .Select(role => role.ToLower())
-                        .Where(role => allowedRoles.Contains(role))
-                        .ToHashSet();
-
-                    if (filteredRoles.Count != 0)
+                    if (filteredRoles.Any())
                     {
-                        query = query.Where(u => filteredRoles.Contains(u.Role.ToLower()));
+                        query = query.Where(u => filteredRoles.Contains(u.Role));
+                        _logger.LogInformation("Zapytanie po filtrze ról={roles}: {query}", roles, query.ToQueryString());
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Żadne z przesłanych ról nie pasuje do dozwolonych: {roles}", string.Join(", ", roles));
                     }
                 }
 
-
+                // Sortowanie wyników
                 if (!string.IsNullOrEmpty(sortBy))
                 {
                     query = sortBy.ToLower() switch
                     {
-                        "role" => sortOrder.Equals("asc", StringComparison.CurrentCultureIgnoreCase) ? query.OrderBy(u => u.Role) : query.OrderByDescending(u => u.Role),
-                        "isactive" => sortOrder.Equals("asc", StringComparison.CurrentCultureIgnoreCase) ? query.OrderBy(u => u.IsActive) : query.OrderByDescending(u => u.IsActive),
-                        "createdat" => sortOrder.Equals("asc", StringComparison.CurrentCultureIgnoreCase) ? query.OrderBy(u => u.CreatedAt) : query.OrderByDescending(u => u.CreatedAt),
-                        "lastlogin" => sortOrder.Equals("asc", StringComparison.CurrentCultureIgnoreCase) ? query.OrderBy(u => u.LastLogin) : query.OrderByDescending(u => u.LastLogin),
-                        _ => sortOrder.Equals("asc", StringComparison.CurrentCultureIgnoreCase) ? query.OrderBy(u => u.Email) : query.OrderByDescending(u => u.Email),
+                        "role" => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase)
+                            ? query.OrderBy(u => u.Role)
+                            : query.OrderByDescending(u => u.Role),
+                        "isactive" => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase)
+                            ? query.OrderBy(u => u.IsActive)
+                            : query.OrderByDescending(u => u.IsActive),
+                        "createdat" => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase)
+                            ? query.OrderBy(u => u.CreatedAt)
+                            : query.OrderByDescending(u => u.CreatedAt),
+                        "lastlogin" => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase)
+                            ? query.OrderBy(u => u.LastLogin)
+                            : query.OrderByDescending(u => u.LastLogin),
+                        _ => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase)
+                            ? query.OrderBy(u => u.Email)
+                            : query.OrderByDescending(u => u.Email),
                     };
+                    _logger.LogInformation("Zapytanie po sortowaniu sortBy={sortBy}, sortOrder={sortOrder}: {query}", sortBy, sortOrder, query.ToQueryString());
                 }
 
-
+                // Liczba wyników przed paginacją
                 var totalItems = await query.CountAsync();
+                _logger.LogInformation("Liczba wyników po zastosowaniu filtrów: {totalItems}", totalItems);
 
-                // Przekształcenie wyników do DTO
+                // Zastosowanie paginacji i mapowanie na DTO
                 var users = await query
                     .Skip((page - 1) * pageSize)
                     .Take(pageSize)
                     .Select(user => new UserAdminResponseDto
                     {
+                        Id = user.Id,
                         Email = user.Email,
                         Role = user.Role,
-                        Id = user.Id,
                         IsActive = user.IsActive,
+                        CreatedAt = user.CreatedAt,
                         LastLogin = user.LastLogin
                     })
                     .ToListAsync();
+                _logger.LogInformation("Pobrano {count} użytkowników na stronie {page}.", users.Count, page);
 
-
+                // Przygotowanie wyniku jako PagedResult
                 var result = new PagedResult<UserAdminResponseDto>
                 {
                     CurrentPage = page,
@@ -108,12 +130,13 @@ namespace BudgetManagerAPI.Controllers
                     Items = users
                 };
 
+                _logger.LogInformation("Zakończono pobieranie użytkowników. Łącznie stron: {totalPages}", result.TotalPages);
                 return Ok(result);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occurred while fetching transactions.");
-                return StatusCode(500, new { Message = "An error occurred while processing your request." });
+                _logger.LogError(ex, "Wystąpił błąd podczas pobierania użytkowników.");
+                return StatusCode(500, new { Message = "Wystąpił błąd podczas przetwarzania żądania." });
             }
         }
 

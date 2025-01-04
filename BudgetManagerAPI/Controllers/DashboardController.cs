@@ -34,10 +34,8 @@ namespace BudgetManagerAPI.Controllers
                 return Unauthorized(new { Message = "User is not authenticated." });
             }
 
-            // Pobierz transakcje z bieżacego miesiaca
             var currentDate = DateTime.UtcNow;
             var transactions = await _context.Transactions
-                .Where(t => t.UserId == parsedUsedId && t.Date.Month == currentDate.Month && t.Date.Year == currentDate.Year)
                 .Include(t => t.Category)
                 .ToListAsync();
 
