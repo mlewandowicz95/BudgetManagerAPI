@@ -34,28 +34,49 @@ namespace BudgetManagerAPI.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] UserRequestDto userDto)
         {
+
             if (!ModelState.IsValid)
             {
-                _logger.LogError("Model state is not valid");
-                return BadRequest(ModelState);
+                var errors = ModelState
+                    .Where(ms => ms.Value.Errors.Count > 0)
+                    .ToDictionary(
+                        kvp => kvp.Key,
+                        kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray()
+                    );
+
+                _logger.LogError("Model state is not valid. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return BadRequest(new ErrorResponseDto
+                {
+                    Message = "Validation failed.",
+                    ErrorCode = "VALIDATION_ERROR",
+                    Errors = errors,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
             if (userDto.ConfirmPassword != userDto.Password)
             {
-                _logger.LogError("Passwords are not the same.");
-                return BadRequest(new { Message = "Passwords do not match." });
+                _logger.LogError("Passwords do not match. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return BadRequest(new ErrorResponseDto
+                {
+                    Message = "Passwords do not match.",
+                    ErrorCode = "PASSWORDS_MISMATCH",
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
             if (await _context.Users.AnyAsync(u => u.Email == userDto.Email))
             {
-                _logger.LogError("User with email {email} already exists.", userDto.Email);
-                return BadRequest(new { Message = "User already exists." });
+                _logger.LogError("User with email {email} already exists. TraceId: {TraceId}", userDto.Email, HttpContext.TraceIdentifier);
+                return BadRequest(new ErrorResponseDto
+                {
+                    Message = "User already exists.",
+                    ErrorCode = "USER_ALREADY_EXISTS",
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
-            // Hashowanie hasła
             var hashedPassword = BCrypt.Net.BCrypt.HashPassword(userDto.Password);
-
-            // Generowanie tokenu aktywacyjnego
             var activationToken = Guid.NewGuid().ToString();
 
             var user = new User
@@ -66,29 +87,62 @@ namespace BudgetManagerAPI.Controllers
                 ActivationToken = activationToken
             };
 
-            // Zapisanie użytkownika do bazy
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
-
-            // Wysyłanie e-maila aktywacyjnego
-            var activationLink = Url.Action(
-                nameof(ConfirmEmail),
-                "Auth",
-                new { token = user.ActivationToken },
-                protocol: HttpContext.Request.Scheme);
-
-            await _emailService.SendEmailAsync(user.Email, "Activate your account",
-                $"Click here to activate your account: {activationLink}");
-
-            // Zwrócenie odpowiedzi
-            return Ok(new UserResponseDto
+            try
             {
-                Id = user.Id,
-                Email = user.Email,
-                Role = user.Role,
+                if (_context.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory")
+                {
+                    using var transaction = await _context.Database.BeginTransactionAsync();
 
-            });
+                    _context.Users.Add(user);
+                    await _context.SaveChangesAsync();
+
+                    var activationLink = Url.Action(
+                        nameof(ConfirmEmail),
+                        "Auth",
+                        new { token = user.ActivationToken },
+                        protocol: HttpContext.Request.Scheme);
+
+                    await _emailService.SendEmailAsync(user.Email, "Activate your account",
+                        $"Click here to activate your account: {activationLink}");
+
+                    await transaction.CommitAsync();
+                }
+                else
+                {
+
+                    _context.Users.Add(user);
+                    await _context.SaveChangesAsync();
+
+                    var activationLink = Url.Action(
+                        nameof(ConfirmEmail),
+                        "Auth",
+                        new { token = user.ActivationToken },
+                        protocol: HttpContext.Request.Scheme);
+
+                    await _emailService.SendEmailAsync(user.Email, "Activate your account",
+                        $"Click here to activate your account: {activationLink}");
+                }
+
+                return Ok(new UserResponseDto
+                {
+                    Id = user.Id,
+                    Email = user.Email,
+                    Role = user.Role,
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while registering the user. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Message = "An error occurred while processing your request. Please try again later.",
+                    ErrorCode = "INTERNAL_SERVER_ERROR",
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
         }
+
+
 
         [HttpGet("confirm-email")]
         public async Task<IActionResult> ConfirmEmail([FromQuery] string token)
