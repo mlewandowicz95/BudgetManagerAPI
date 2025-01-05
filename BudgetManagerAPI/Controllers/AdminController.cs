@@ -42,6 +42,7 @@ namespace BudgetManagerAPI.Controllers
                 return Unauthorized(new { Message = "Błąd w UserId." });
             }
 
+
             try
             {
                 _logger.LogInformation("Rozpoczęcie pobierania użytkowników. Parametry: isActive={isActive}, roles={roles}, page={page}, pageSize={pageSize}, sortBy={sortBy}, sortOrder={sortOrder}",
@@ -179,10 +180,16 @@ namespace BudgetManagerAPI.Controllers
                 return BadRequest(ModelState);
             }
 
+            if (_context.Users.Any(u => u.Email == userRequestDto.Email))
+            {
+                return BadRequest(new { Message = "Email is already in use." });
+            }
+
+
             var user = new User
             {
                 Email = userRequestDto.Email,
-                PasswordHash = userRequestDto.Password,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(userRequestDto.Password),
                 Role = userRequestDto.Role,
             };
 
