@@ -1,10 +1,8 @@
 ﻿namespace BudgetManagerAPI.DTO
 {
-    public class ErrorResponseDto
+    public class ErrorResponseDto : BaseResponseDto
     {
-        public string Message { get; set; } 
         public string ErrorCode { get; set; } 
         public IDictionary<string, string[]> Errors { get; set; } 
-        public string TraceId { get; set; } 
     }
 }

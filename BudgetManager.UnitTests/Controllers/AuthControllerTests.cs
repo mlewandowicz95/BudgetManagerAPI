@@ -1,4 +1,5 @@
-﻿using BudgetManagerAPI.Configurations;
+﻿using Azure;
+using BudgetManagerAPI.Configurations;
 using BudgetManagerAPI.Controllers;
 using BudgetManagerAPI.Data;
 using BudgetManagerAPI.DTO;
@@ -15,6 +16,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -72,7 +74,6 @@ namespace BudgetManager.UnitTests.Controllers
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!"),
                 IsActive = true,
 
-
             });
             _dbContext.SaveChanges();
         }
@@ -102,8 +103,7 @@ namespace BudgetManager.UnitTests.Controllers
                 HttpContext = httpContext
             };
 
-
-            // act
+            // Act
             var result = await _controller.Register(newUser);
 
             // Assert
@@ -112,22 +112,28 @@ namespace BudgetManager.UnitTests.Controllers
             var okResult = result as OkObjectResult;
             Assert.NotNull(okResult);
 
-            var response = okResult.Value as UserResponseDto;
+            var response = okResult.Value as SuccessResponseDto<UserResponseDto>;
             Assert.NotNull(response);
-            Assert.Equal(newUser.Email, response.Email);
+            Assert.True(response.Success, "Response should indicate success.");
+            Assert.Equal("User has been registered.", response.Message);
+            Assert.Equal(newUser.Email, response.Data.Email); // Pobieranie Email z Data
+            Assert.NotNull(response.TraceId);
 
+            // Sprawdzenie, czy użytkownik został zapisany w bazie
             var userInDb = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == newUser.Email);
             Assert.NotNull(userInDb);
             Assert.False(userInDb.IsActive);
             Assert.NotEmpty(userInDb.ActivationToken);
 
+            // Weryfikacja, czy email aktywacyjny został wysłany
             _mockEmailService.Verify(es =>
                 es.SendEmailAsync(
                     It.Is<string>(email => email == newUser.Email),
                     It.Is<string>(subject => subject.Contains("Activate your account")),
                     It.Is<string>(body => body.Contains("Click here to activate your account"))
-                    ), Times.Once);
+                ), Times.Once);
         }
+
 
 
         [Theory]
@@ -234,7 +240,7 @@ namespace BudgetManager.UnitTests.Controllers
 
             var errorResponse = badRequestResult.Value as ErrorResponseDto;
             Assert.NotNull(errorResponse);
-
+            Assert.False(errorResponse.Success, "Response should not indicate success.");
             // Weryfikacja komunikatu o błędzie
             Assert.Equal("Validation failed.", errorResponse.Message);
             Assert.Equal("VALIDATION_ERROR", errorResponse.ErrorCode);
@@ -295,6 +301,8 @@ namespace BudgetManager.UnitTests.Controllers
 
             var errorResponse = badRequestResult.Value as ErrorResponseDto;
             Assert.NotNull(errorResponse);
+            Assert.False(errorResponse.Success, "Response should not indicate success.");
+
             Assert.Equal("Validation failed.", errorResponse.Message);
             Assert.True(errorResponse.Errors.ContainsKey("ConfirmPassword"), "Brak błędu dla pola 'ConfirmPassword'.");
             var errors = errorResponse.Errors["ConfirmPassword"];
@@ -346,6 +354,8 @@ namespace BudgetManager.UnitTests.Controllers
 
             var errorResponse = badRequestResult.Value as ErrorResponseDto;
             Assert.NotNull(errorResponse);
+            Assert.False(errorResponse.Success, "Response should not indicate success.");
+
             Assert.Contains("User already exists.", errorResponse.Message);
         }
 
@@ -389,6 +399,8 @@ namespace BudgetManager.UnitTests.Controllers
 
             var errorResponse = objectResult.Value as ErrorResponseDto;
             Assert.NotNull(errorResponse);
+            Assert.False(errorResponse.Success, "Response should not indicate success.");
+
             Assert.Equal("An error occurred while processing your request. Please try again later.", errorResponse.Message);
             Assert.Equal("INTERNAL_SERVER_ERROR", errorResponse.ErrorCode);
 
@@ -407,7 +419,7 @@ namespace BudgetManager.UnitTests.Controllers
 
 
 
-            _dbContext.Database.EnsureDeleted(); 
+            _dbContext.Database.EnsureDeleted();
 
 
 
@@ -428,28 +440,238 @@ namespace BudgetManager.UnitTests.Controllers
             var result = await _controller.Register(newUser);
 
             // Assert
-            Assert.IsType<ObjectResult>(result); 
+            Assert.IsType<ObjectResult>(result);
             var objectResult = result as ObjectResult;
             Assert.NotNull(objectResult);
-            Assert.Equal(500, objectResult.StatusCode); 
+            Assert.Equal(500, objectResult.StatusCode);
 
             var errorResponse = objectResult.Value as ErrorResponseDto;
             Assert.NotNull(errorResponse);
+            Assert.False(errorResponse.Success, "Response should not indicate success.");
+
             Assert.Equal("An error occurred while processing your request. Please try again later.", errorResponse.Message);
             Assert.Equal("INTERNAL_SERVER_ERROR", errorResponse.ErrorCode);
 
- 
+
             _loggerMock.Verify(
      log => log.Log(
-         LogLevel.Error,                
-         It.IsAny<EventId>(),            
-         It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("An error occurred while registering the user")), 
-         It.IsAny<Exception>(),         
-         It.IsAny<Func<It.IsAnyType, Exception, string>>() 
+         LogLevel.Error,
+         It.IsAny<EventId>(),
+         It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("An error occurred while registering the user")),
+         It.IsAny<Exception>(),
+         It.IsAny<Func<It.IsAnyType, Exception, string>>()
      ),
      Times.Once
  );
         }
+        #endregion
+
+        #region /api/Auth/confirm-email
+        [Fact]
+        public async Task ConfirmEmail_Should_Return_BadRequest_When_Token_Is_Missing()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            // act
+            var result = await _controller.ConfirmEmail(null);
+
+            // assert 
+            Assert.IsType<BadRequestObjectResult>(result);
+            var badRequestResult = result as BadRequestObjectResult;
+            Assert.NotNull(badRequestResult);
+
+            var errorResponse = badRequestResult.Value as ErrorResponseDto;
+            Assert.NotNull(errorResponse);
+            Assert.False(errorResponse.Success, "Response should not indicate success.");
+
+            Assert.Equal("MISSING_TOKEN", errorResponse.ErrorCode);
+            Assert.Equal("Invalid confirmation request.", errorResponse.Message);
+        }
+
+        [Fact]
+        public async Task ConfirmEmail_Should_Return_NotFound_When_Token_Is_Invalid()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+
+            // Act
+            var result = await _controller.ConfirmEmail("invalid-token");
+
+            // Assert
+            Assert.IsType<NotFoundObjectResult>(result);
+            var notFoundResult = result as NotFoundObjectResult;
+            Assert.NotNull(notFoundResult);
+
+            var errorResponse = notFoundResult.Value as ErrorResponseDto;
+            Assert.NotNull(errorResponse);
+            Assert.False(errorResponse.Success, "Response should not indicate success.");
+
+            Assert.Equal("INVALID_ACTIVATION_TOKEN", errorResponse.ErrorCode);
+            Assert.Equal("Invalid activation token.", errorResponse.Message);
+        }
+
+        [Fact]
+        public async Task ConfirmEmail_Should_Return_BadRequest_When_User_Is_Already_Active()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+            // Arrange
+            var activeUser = new User
+            {
+                Email = "active@example.com",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!@"),
+                ActivationToken = "active-token",
+                IsActive = true
+            };
+            _dbContext.Users.Add(activeUser);
+            await _dbContext.SaveChangesAsync();
+
+            // Act
+            var result = await _controller.ConfirmEmail("active-token");
+
+            // assert 
+            Assert.IsType<BadRequestObjectResult>(result);
+            var badRequestResult = result as BadRequestObjectResult;
+            Assert.NotNull(badRequestResult);
+
+            var errorResponse = badRequestResult.Value as ErrorResponseDto;
+            Assert.NotNull(errorResponse);
+            Assert.False(errorResponse.Success, "Response should not indicate success.");
+
+            Assert.Equal("USER_ALREADY_ACTIVE", errorResponse.ErrorCode);
+            Assert.Equal("User is already active.", errorResponse.Message);
+        }
+
+        [Fact]
+        public async Task ConfirmEmail_Should_Return_Ok_When_Token_Is_Valid()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var activeUser = new User
+            {
+                Email = "active@example.com",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!@"),
+                ActivationToken = "good-token",
+                IsActive = false,
+            };
+            _dbContext.Users.Add(activeUser);
+            await _dbContext.SaveChangesAsync();
+
+            // Act
+            var result = await _controller.ConfirmEmail("good-token");
+
+            // Assert
+            Assert.IsType<OkObjectResult>(result);
+
+            var okResult = result as OkObjectResult;
+            Assert.NotNull(okResult);
+
+            var response = okResult.Value as SuccessResponseDto<ConfirmEmailResponseDto>;
+            Assert.NotNull(response);
+
+            // Sprawdzanie wartości SuccessResponseDto
+            Assert.True(response.Success, "Response should indicate success.");
+            Assert.Equal("Account activated successfully. You can now log in.", response.Message);
+            Assert.Equal("active@example.com", response.Data.Email);
+
+            // Sprawdzenie, czy użytkownik w bazie został aktywowany
+            var userInDb = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == "active@example.com");
+            Assert.NotNull(userInDb);
+            Assert.True(userInDb.IsActive, "User should be marked as active.");
+            Assert.Empty(userInDb.ActivationToken); // Token powinien być usunięty
+
+
+            _loggerMock.Verify(
+                log => log.Log<It.IsAnyType>(
+                    LogLevel.Information,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) =>
+                        v.ToString().Contains("User has been activated.") &&
+                        v.ToString().Contains($"Email: active@example.com") &&
+                        v.ToString().Contains($"TraceId: {httpContext.TraceIdentifier}")),
+                    null,
+                    It.IsAny<Func<It.IsAnyType, Exception, string>>()
+                ),
+                Times.Once
+            );
+
+        }
+
+        [Fact]
+        public async Task ConfirmEmail_Should_Return_InternalServerError_When_Exception_Is_Thrown()
+        {
+            // Arrange
+            var token = "valid-token";
+
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            // Dodanie użytkownika z tokenem do bazy
+            var user = new User
+            {
+                Email = "test@example.com",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!"),
+                ActivationToken = token,
+                IsActive = false
+            };
+            _dbContext.Users.Add(user);
+            await _dbContext.SaveChangesAsync();
+
+            // Symulacja wyjątku - za pomocą nadpisania SaveChangesAsync
+            var mockDbContext = new Mock<AppDbContext>(_dbContextOptions);
+            mockDbContext
+                .Setup(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new Exception("Simulated database error"));
+
+            var controllerWithMockedDb = new AuthController(mockDbContext.Object, _tokenService, _loggerMock.Object, _mockEmailService.Object)
+            {
+                ControllerContext = new ControllerContext
+                {
+                    HttpContext = httpContext
+                }
+            };
+
+            // Act
+            var result = await controllerWithMockedDb.ConfirmEmail(token);
+
+            // Assert
+            Assert.IsType<ObjectResult>(result);
+            var objectResult = result as ObjectResult;
+            Assert.NotNull(objectResult);
+            Assert.Equal(500, objectResult.StatusCode);
+
+            var errorResponse = objectResult.Value as ErrorResponseDto;
+            Assert.NotNull(errorResponse);
+            Assert.False(errorResponse.Success, "Response should indicate failure.");
+            Assert.Equal("INTERNAL_SERVER_ERROR", errorResponse.ErrorCode);
+            Assert.Equal("An error occurred while processing your request. Please try again later.", errorResponse.Message);
+
+        }
+
+
+
         #endregion
 
     }
