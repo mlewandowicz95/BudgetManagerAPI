@@ -10,10 +10,10 @@ namespace BudgetManagerAPI.DTO
     public class LoginRequestDto
     {
         [EmailAddress]
-        [Required]
+        [Required(ErrorMessage = "Email is required.")]
         public string Email { get; set; }
 
-        [Required]
+        [Required(ErrorMessage = "Password is required.")]
         public string Password { get; set; }
 
     }

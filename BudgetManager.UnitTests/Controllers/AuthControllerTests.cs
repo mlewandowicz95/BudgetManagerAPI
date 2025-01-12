@@ -7,6 +7,7 @@ using BudgetManagerAPI.Interfaces;
 using BudgetManagerAPI.Models;
 using BudgetManagerAPI.Services;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.EntityFrameworkCore;
@@ -935,6 +936,230 @@ namespace BudgetManager.UnitTests.Controllers
                 Times.Once
             );
         }
+
+        #endregion
+
+        #region /api/Auth/login
+
+        [Fact]
+        public async Task Login_Should_Return_Ok_When_Credentials_Are_Valid()
+        {
+
+            // Arrange
+            var validUser = new User
+            {
+                Email = "valid@example.com",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("ValidPassword123!"),
+                IsActive = true,
+                Role = "User"
+            };
+            _dbContext.Users.Add(validUser);
+            await _dbContext.SaveChangesAsync();
+
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+
+            var dto = new LoginRequestDto
+            {
+                Email = "valid@example.com",
+                Password = "ValidPassword123!"
+            };
+
+            // Act
+            var result = await _controller.Login(dto);
+
+            Assert.IsType<OkObjectResult>(result);
+            var objectResult = result as OkObjectResult;
+            Assert.NotNull(objectResult);
+
+            var response = objectResult.Value as SuccessResponseDto<LoginResponseDto>;
+            Assert.NotNull(response);
+            Assert.True(response.Success, "Respone should indicate success.");
+            Assert.Equal("Login successful.", response.Message);
+            Assert.NotNull(response.TraceId);
+
+
+            var userInDb = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
+            Assert.NotNull(userInDb);
+            Assert.True(userInDb.IsActive, "User should be active.");
+            Assert.NotNull(response.Data.Token);
+        }
+
+        [Theory]
+        [InlineData("", "Password123!", "Email is required.")]
+        [InlineData("exitinguser@example.com", "", "Password is required.")]
+        public async Task Login_Should_Return_BadRequest_When_Model_Is_Invalid(string email, string password, string expectedErrorMessage)
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var loginRequest = new LoginRequestDto
+            {
+                Email = email,
+                Password = password,
+            };
+
+            // Ręczna walidacja ModelState
+            var validationContext = new ValidationContext(loginRequest);
+            var validationResults = new List<ValidationResult>();
+            Validator.TryValidateObject(loginRequest, validationContext, validationResults, true);
+
+            foreach (var validationResult in validationResults)
+            {
+                foreach (var memberName in validationResult.MemberNames)
+                {
+                    _controller.ModelState.AddModelError(memberName, validationResult.ErrorMessage);
+                }
+            }
+
+
+            // Act
+            var result = await _controller.Login(loginRequest);
+
+            // Assert
+            Assert.IsType<BadRequestObjectResult>(result);
+
+            var badRequestObjectResult = result as BadRequestObjectResult;
+            Assert.NotNull(badRequestObjectResult);
+
+            var response = badRequestObjectResult.Value as ErrorResponseDto;
+            Assert.NotNull(response);
+            Assert.False(response.Success, "Response should not indicate success.");
+            Assert.Equal("Validation failed.", response.Message);
+            Assert.Equal("VALIDATION_ERROR", response.ErrorCode);
+            Assert.NotNull(response.TraceId);
+
+            Assert.True(response.Errors.ContainsKey("Email") || response.Errors.ContainsKey("Password"));
+            Assert.Contains(expectedErrorMessage, response.Errors.Values.SelectMany(e => e));
+
+        }
+
+        [Fact]
+        public async Task Login_Should_Return_Unauthorized_When_Email_Or_Password_Is_Invalid()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var loginRequest = new LoginRequestDto
+            {
+                Email = "wrong@example.com",
+                Password = "WrongPassword123!"
+            };
+
+            // Act
+            var result = await _controller.Login(loginRequest);
+
+            // Assert
+            Assert.IsType<UnauthorizedObjectResult>(result);
+
+            var unauthorizedResult = result as UnauthorizedObjectResult;
+            Assert.NotNull(unauthorizedResult);
+
+            var response = unauthorizedResult.Value as ErrorResponseDto;
+            Assert.NotNull(response);
+            Assert.False(response.Success, "Response should not indicate success.");
+            Assert.Equal("Invalid email or password.", response.Message);
+            Assert.Equal("INVALID_CREDENTIALS", response.ErrorCode);
+            Assert.NotNull(response.TraceId);
+
+        }
+
+        [Fact]
+        public async Task Login_Should_Return_Unauthorized_When_User_Is_Not_Active()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var loginRequest = new LoginRequestDto
+            {
+                Email = "noactive@example.com",
+                Password = "Password123!"
+            };
+
+            // Act
+            var result = await _controller.Login(loginRequest);
+
+
+            // Assert
+            Assert.IsType<UnauthorizedObjectResult>(result);
+            var unauthorizedResult = result as UnauthorizedObjectResult;
+            Assert.NotNull(unauthorizedResult);
+
+            var response = unauthorizedResult.Value as ErrorResponseDto;
+            Assert.NotNull(response);
+            Assert.False(response.Success, "Response should not indicate success.");
+            Assert.Equal("Account is not activated.", response.Message);
+            Assert.Equal("ACCOUNT_NOT_ACTIVATED", response.ErrorCode);
+            Assert.NotNull(response.TraceId);
+        }
+
+
+        [Fact]
+        public async Task Login_Should_Return_BadRequest_When_Server_Throw_Exception()
+        {
+            // Arrange
+
+
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            _dbContext.Dispose();
+
+            var dto = new LoginRequestDto
+            {
+                Email = "exitinguser@example.com",
+                Password = "Password123!"
+            };
+
+            // Act
+            var result = await _controller.Login(dto);
+
+            // Assert
+            Assert.IsType<ObjectResult>(result);
+            var objectResult = result as ObjectResult;
+            Assert.NotNull(objectResult);
+            Assert.Equal(500, objectResult.StatusCode);
+
+            var errorResponse = objectResult.Value as ErrorResponseDto;
+            Assert.NotNull(errorResponse);
+            Assert.False(errorResponse.Success, "Response should not indicate success.");
+            Assert.Equal("An error occurred while processing your request. Please try again later.", errorResponse.Message);
+            Assert.Equal("INTERNAL_SERVER_ERROR", errorResponse.ErrorCode);
+
+            _loggerMock.Verify(
+                log => log.Log(
+                    LogLevel.Error,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("An unexpected error occurred while logging in.")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception, string>>()
+                ),
+                Times.Once
+            );
+        }
+
+
+
+
 
         #endregion
     }

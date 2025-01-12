@@ -162,8 +162,6 @@ namespace BudgetManagerAPI.Controllers
             }
         }
 
-
-
         [HttpGet("confirm-email")]
         public async Task<IActionResult> ConfirmEmail([FromQuery] string token)
         {
@@ -326,35 +324,85 @@ namespace BudgetManagerAPI.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequestDto userDto)
         {
+            /*
             if (!ModelState.IsValid)
             {
                 _logger.LogError("Model state is not valid");
                 return BadRequest(ModelState);
             }
-
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == userDto.Email);
-            if (user == null || !BCrypt.Net.BCrypt.Verify(userDto.Password, user.PasswordHash))
+            */
+            if (!ModelState.IsValid)
             {
-                _logger.LogError("Invalid email or password.");
-                return Unauthorized(new ErrorResponseDto { Message = "Invalid email or password." });
+                var errors = ModelState
+                    .Where(ms => ms.Value.Errors.Count > 0)
+                    .ToDictionary(
+                        kvp => kvp.Key,
+                        kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray()
+                    );
+
+                _logger.LogError("Model state is not valid.");
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Validation failed.",
+                    ErrorCode = "VALIDATION_ERROR",
+                    Errors = errors,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
-            if (!user.IsActive)
+            try
             {
-                _logger.LogError("Account is no activated.");
-                return Unauthorized(new ErrorResponseDto { Message = "Account is no activated." });
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == userDto.Email);
+                if (user == null || !BCrypt.Net.BCrypt.Verify(userDto.Password, user.PasswordHash))
+                {
+                    _logger.LogError("Invalid email or password.");
+                    return Unauthorized(new ErrorResponseDto
+                    {
+                        Success = false,
+                        Message = "Invalid email or password.",
+                        ErrorCode = "INVALID_CREDENTIALS",
+                        TraceId = HttpContext.TraceIdentifier
+                    });
+                }
+
+                if (!user.IsActive)
+                {
+                    _logger.LogError("Account is not activated.");
+                    return Unauthorized(new ErrorResponseDto
+                    {
+                        Success = false,
+                        Message = "Account is not activated.",
+                        ErrorCode = "ACCOUNT_NOT_ACTIVATED",
+                        TraceId = HttpContext.TraceIdentifier
+                    });
+                }
+
+                user.LastLogin = DateTime.UtcNow;
+
+                var token = _tokenService.GenerateToken(user.Id, user.Role);
+
+                await _context.SaveChangesAsync();
+
+                return Ok(new SuccessResponseDto<LoginResponseDto>
+                {
+                    Success = true,
+                    Message = "Login successful.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data = new LoginResponseDto { Token = token }
+                });
             }
-
-            user.LastLogin = DateTime.UtcNow;
-
-            var token = _tokenService.GenerateToken(user.Id, user.Role);
-
-            await _context.SaveChangesAsync();
-
-            return Ok(new LoginResponseDto
+            catch (Exception ex)
             {
-                Token = token
-            });
+                _logger.LogError(ex, "An unexpected error occurred while logging in. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request. Please try again later.",
+                    ErrorCode = "INTERNAL_SERVER_ERROR",
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
         }
 
         [HttpPost("request-password-reset")]
