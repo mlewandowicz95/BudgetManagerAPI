@@ -4,7 +4,7 @@ namespace BudgetManagerAPI.DTO
 {
     public class ResetPasswordRequestDto
     {
-        [Required]
+        [Required(ErrorMessage = "Email is required.")]
         [EmailAddress]
         public string Email { get; set; }
     }

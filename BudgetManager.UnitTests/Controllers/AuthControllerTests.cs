@@ -1,5 +1,6 @@
 ﻿using Azure;
 using BudgetManagerAPI.Configurations;
+using BudgetManagerAPI.Constants;
 using BudgetManagerAPI.Controllers;
 using BudgetManagerAPI.Data;
 using BudgetManagerAPI.DTO;
@@ -12,12 +13,19 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.VisualStudio.TestPlatform.Common;
 using Moq;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
+using System.Linq.Dynamic.Core.Tokenizer;
 using System.Linq.Expressions;
+using System.Reflection;
+using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
 using static System.Runtime.InteropServices.JavaScript.JSType;
@@ -198,7 +206,6 @@ namespace BudgetManager.UnitTests.Controllers
 
             var errorResponse = badRequestResult.Value as ErrorResponseDto;
             Assert.NotNull(errorResponse);
-
             Assert.True(errorResponse.Errors.ContainsKey("Email"), "Brak błędu dla pola 'Email'.");
             var errors = errorResponse.Errors["Email"];
             Assert.Contains(expectedErrorMessage, errors);
@@ -256,7 +263,7 @@ namespace BudgetManager.UnitTests.Controllers
             Assert.False(errorResponse.Success, "Response should not indicate success.");
             // Weryfikacja komunikatu o błędzie
             Assert.Equal("Validation failed.", errorResponse.Message);
-            Assert.Equal("VALIDATION_ERROR", errorResponse.ErrorCode);
+            Assert.Equal(ErrorCodes.ValidationError, errorResponse.ErrorCode);
 
 
             Assert.True(errorResponse.Errors.ContainsKey("Password"), "Brak błędu dla pola 'Password'.");
@@ -317,6 +324,7 @@ namespace BudgetManager.UnitTests.Controllers
             Assert.False(errorResponse.Success, "Response should not indicate success.");
 
             Assert.Equal("Validation failed.", errorResponse.Message);
+
             Assert.True(errorResponse.Errors.ContainsKey("ConfirmPassword"), "Brak błędu dla pola 'ConfirmPassword'.");
             var errors = errorResponse.Errors["ConfirmPassword"];
             Assert.Contains(expectedErrorMessage, errors);
@@ -338,6 +346,7 @@ namespace BudgetManager.UnitTests.Controllers
                 Email = "exitinguser@example.com",
                 Password = "Password123!",
                 ConfirmPassword = "Password123!",
+                
             };
 
             var mockUrlHelper = new Mock<IUrlHelper>();
@@ -368,7 +377,7 @@ namespace BudgetManager.UnitTests.Controllers
             var errorResponse = badRequestResult.Value as ErrorResponseDto;
             Assert.NotNull(errorResponse);
             Assert.False(errorResponse.Success, "Response should not indicate success.");
-
+            Assert.Equal(ErrorCodes.UserAlreadyExists, errorResponse.ErrorCode);
             Assert.Contains("User already exists.", errorResponse.Message);
         }
 
@@ -415,7 +424,7 @@ namespace BudgetManager.UnitTests.Controllers
             Assert.False(errorResponse.Success, "Response should not indicate success.");
 
             Assert.Equal("An error occurred while processing your request. Please try again later.", errorResponse.Message);
-            Assert.Equal("INTERNAL_SERVER_ERROR", errorResponse.ErrorCode);
+            Assert.Equal(ErrorCodes.InternalServerError, errorResponse.ErrorCode);
 
         }
 
@@ -463,7 +472,7 @@ namespace BudgetManager.UnitTests.Controllers
             Assert.False(errorResponse.Success, "Response should not indicate success.");
 
             Assert.Equal("An error occurred while processing your request. Please try again later.", errorResponse.Message);
-            Assert.Equal("INTERNAL_SERVER_ERROR", errorResponse.ErrorCode);
+            Assert.Equal(ErrorCodes.InternalServerError, errorResponse.ErrorCode);
 
 
             _loggerMock.Verify(
@@ -502,7 +511,7 @@ namespace BudgetManager.UnitTests.Controllers
             Assert.NotNull(errorResponse);
             Assert.False(errorResponse.Success, "Response should not indicate success.");
 
-            Assert.Equal("MISSING_TOKEN", errorResponse.ErrorCode);
+            Assert.Equal(ErrorCodes.MissingToken, errorResponse.ErrorCode);
             Assert.Equal("Invalid confirmation request.", errorResponse.Message);
         }
 
@@ -529,7 +538,7 @@ namespace BudgetManager.UnitTests.Controllers
             Assert.NotNull(errorResponse);
             Assert.False(errorResponse.Success, "Response should not indicate success.");
 
-            Assert.Equal("INVALID_ACTIVATION_TOKEN", errorResponse.ErrorCode);
+            Assert.Equal(ErrorCodes.InvalidToken, errorResponse.ErrorCode);
             Assert.Equal("Invalid activation token.", errorResponse.Message);
         }
 
@@ -565,7 +574,7 @@ namespace BudgetManager.UnitTests.Controllers
             Assert.NotNull(errorResponse);
             Assert.False(errorResponse.Success, "Response should not indicate success.");
 
-            Assert.Equal("USER_ALREADY_ACTIVE", errorResponse.ErrorCode);
+            Assert.Equal(ErrorCodes.UserAlreadyActive, errorResponse.ErrorCode);
             Assert.Equal("User is already active.", errorResponse.Message);
         }
 
@@ -678,7 +687,7 @@ namespace BudgetManager.UnitTests.Controllers
             var errorResponse = objectResult.Value as ErrorResponseDto;
             Assert.NotNull(errorResponse);
             Assert.False(errorResponse.Success, "Response should indicate failure.");
-            Assert.Equal("INTERNAL_SERVER_ERROR", errorResponse.ErrorCode);
+            Assert.Equal(ErrorCodes.InternalServerError, errorResponse.ErrorCode);
             Assert.Equal("An error occurred while processing your request. Please try again later.", errorResponse.Message);
 
         }
@@ -796,7 +805,7 @@ namespace BudgetManager.UnitTests.Controllers
             Assert.NotNull(response);
             Assert.False(response.Success, "Response should indicate failure.");
             Assert.Equal("Validation failed.", response.Message);
-            Assert.Equal("VALIDATION_ERROR", response.ErrorCode);
+            Assert.Equal(ErrorCodes.ValidationError, response.ErrorCode);
             Assert.NotNull(response.TraceId);
 
             // Sprawdzenie błędów w odpowiedzi
@@ -839,7 +848,7 @@ namespace BudgetManager.UnitTests.Controllers
             Assert.NotNull(response);
             Assert.False(response.Success, "Response should indicate failure.");
             Assert.Equal("User not found.", response.Message);
-            Assert.Equal("USER_NOT_FOUND", response.ErrorCode);
+            Assert.Equal(ErrorCodes.UserNotFound, response.ErrorCode);
             Assert.NotNull(response.TraceId);
 
 
@@ -879,7 +888,7 @@ namespace BudgetManager.UnitTests.Controllers
             Assert.NotNull(response);
             Assert.False(response.Success, "Response should indicate failure.");
             Assert.Equal("User is already active.", response.Message);
-            Assert.Equal("USER_ALREADY_ACTIVE", response.ErrorCode);
+            Assert.Equal(ErrorCodes.UserAlreadyActive, response.ErrorCode);
             Assert.NotNull(response.TraceId);
 
         }
@@ -923,7 +932,7 @@ namespace BudgetManager.UnitTests.Controllers
             Assert.NotNull(errorResponse);
             Assert.False(errorResponse.Success, "Response should not indicate success.");
             Assert.Equal("An error occurred while processing your request. Please try again later.", errorResponse.Message);
-            Assert.Equal("INTERNAL_SERVER_ERROR", errorResponse.ErrorCode);
+            Assert.Equal(ErrorCodes.InternalServerError, errorResponse.ErrorCode);
 
             _loggerMock.Verify(
                 log => log.Log(
@@ -1034,7 +1043,7 @@ namespace BudgetManager.UnitTests.Controllers
             Assert.NotNull(response);
             Assert.False(response.Success, "Response should not indicate success.");
             Assert.Equal("Validation failed.", response.Message);
-            Assert.Equal("VALIDATION_ERROR", response.ErrorCode);
+            Assert.Equal(ErrorCodes.ValidationError, response.ErrorCode);
             Assert.NotNull(response.TraceId);
 
             Assert.True(response.Errors.ContainsKey("Email") || response.Errors.ContainsKey("Password"));
@@ -1071,7 +1080,7 @@ namespace BudgetManager.UnitTests.Controllers
             Assert.NotNull(response);
             Assert.False(response.Success, "Response should not indicate success.");
             Assert.Equal("Invalid email or password.", response.Message);
-            Assert.Equal("INVALID_CREDENTIALS", response.ErrorCode);
+            Assert.Equal(ErrorCodes.InvalidCredentials, response.ErrorCode);
             Assert.NotNull(response.TraceId);
 
         }
@@ -1105,7 +1114,7 @@ namespace BudgetManager.UnitTests.Controllers
             Assert.NotNull(response);
             Assert.False(response.Success, "Response should not indicate success.");
             Assert.Equal("Account is not activated.", response.Message);
-            Assert.Equal("ACCOUNT_NOT_ACTIVATED", response.ErrorCode);
+            Assert.Equal(ErrorCodes.AccountNotActivated, response.ErrorCode);
             Assert.NotNull(response.TraceId);
         }
 
@@ -1143,7 +1152,7 @@ namespace BudgetManager.UnitTests.Controllers
             Assert.NotNull(errorResponse);
             Assert.False(errorResponse.Success, "Response should not indicate success.");
             Assert.Equal("An error occurred while processing your request. Please try again later.", errorResponse.Message);
-            Assert.Equal("INTERNAL_SERVER_ERROR", errorResponse.ErrorCode);
+            Assert.Equal(ErrorCodes.InternalServerError, errorResponse.ErrorCode);
 
             _loggerMock.Verify(
                 log => log.Log(
@@ -1159,6 +1168,736 @@ namespace BudgetManager.UnitTests.Controllers
 
 
 
+
+
+        #endregion
+
+        #region /api/Auth/request-password-reset
+
+        [Theory]
+        [InlineData("", "Email is required.")]
+        [InlineData(null, "Email is required.")]
+
+        public async Task RequestPasswordReset_Should_Return_BadRequest_When_Model_Is_Invalid(string email, string expectedErrorMessage)
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var requestDto = new ResetPasswordRequestDto
+            {
+                Email = email
+            };
+
+            // Ręczna walidacja ModelState
+            var validationContext = new ValidationContext(requestDto);
+            var validationResults = new List<ValidationResult>();
+            Validator.TryValidateObject(requestDto, validationContext, validationResults, true);
+
+            foreach (var validationResult in validationResults)
+            {
+                foreach (var memberName in validationResult.MemberNames)
+                {
+                    _controller.ModelState.AddModelError(memberName, validationResult.ErrorMessage);
+                }
+            }
+
+
+            // Act
+            var result = await _controller.RequestPasswordReset(requestDto);
+
+            // Assert
+            Assert.IsType<BadRequestObjectResult>(result);
+
+            var badRequestObjectResult = result as BadRequestObjectResult;
+            Assert.NotNull(badRequestObjectResult);
+
+            var response = badRequestObjectResult.Value as ErrorResponseDto;
+            Assert.NotNull(response);
+            Assert.False(response.Success, "Response should not indicate success.");
+            Assert.Equal("Validation failed.", response.Message);
+            Assert.Equal(ErrorCodes.ValidationError, response.ErrorCode);
+            Assert.NotNull(response.TraceId);
+
+            Assert.True(response.Errors.ContainsKey("Email"));
+            Assert.Contains(expectedErrorMessage, response.Errors.Values.SelectMany(e => e));
+        }
+
+        [Fact]
+        public async Task RequestPasswordReset_Should_Return_NotFound_When_User_Does_Not_Exist()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var requestDto = new ResetPasswordRequestDto
+            {
+                Email = "notexitinguser@example.com"
+            };
+
+            // Act
+            var result = await _controller.RequestPasswordReset(requestDto);
+
+            // Assert
+            Assert.IsType<NotFoundObjectResult>(result);
+
+            var notFoundResult = result as NotFoundObjectResult;
+            Assert.NotNull(notFoundResult);
+
+            var response = notFoundResult.Value as ErrorResponseDto;
+            Assert.NotNull(response);
+            Assert.False(response.Success, "Response should not indicate success.");
+            Assert.Equal("User with email not found.", response.Message);
+            Assert.Equal(ErrorCodes.UserNotFound, response.ErrorCode);
+            Assert.NotNull(response.TraceId);
+        }
+
+        [Fact]
+        public async Task RequestPasswordReset_Should_Return_Ok_When_Token_Is_Generated()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var requestDto = new ResetPasswordRequestDto
+            {
+                Email = "exitinguser@example.com",
+            };
+
+            var mockUrlHelper = new Mock<IUrlHelper>();
+            mockUrlHelper
+                .Setup(u => u.Action(It.IsAny<UrlActionContext>()))
+                .Returns("https://test-url.com/reset-password");
+
+            _controller.Url = mockUrlHelper.Object;
+
+            // Act
+            var result = await _controller.RequestPasswordReset(requestDto);
+
+            // Assert
+            Assert.IsType<OkObjectResult>(result);
+
+            var objectResult = result as OkObjectResult;
+            Assert.NotNull(objectResult);
+
+            var response = objectResult.Value as SuccessResponseDto<ResetPasswordResponseDto>;
+            Assert.NotNull(response);
+            Assert.True(response.Success, "Response should indicate success.");
+            Assert.Equal("Password reset link sent to you email.", response.Message);
+            Assert.NotNull(response.TraceId);
+            Assert.NotNull(response.Data);
+            Assert.Equal("exitinguser@example.com", response.Data.Email);
+
+            var userInDb = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == "exitinguser@example.com");
+            Assert.NotNull(userInDb);
+            Assert.NotNull(userInDb.ResetToken);
+            Assert.True(userInDb.ResetTokenExpiry > DateTime.UtcNow);
+
+            _mockEmailService.Verify(es =>
+    es.SendEmailAsync(
+        It.Is<string>(email => email == "exitinguser@example.com"),
+        It.Is<string>(subject => subject.Contains("Reset your password")),
+        It.Is<string>(body => body.Contains("Use the following link to reset your password"))
+    ),
+    Times.Once
+);
+        }
+
+        [Fact]
+        public async Task RequestPasswordReset_Should_Return_InternalServerError_When_Exception_Is_Thrown()
+        {
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            _dbContext.Dispose();
+
+            var dto = new ResetPasswordRequestDto
+            {
+                Email = "exitinguser@example.com",
+            };
+
+            // Act
+            var result = await _controller.RequestPasswordReset(dto);
+
+            // Assert
+            Assert.IsType<ObjectResult>(result);
+            var objectResult = result as ObjectResult;
+            Assert.NotNull(objectResult);
+            Assert.Equal(500, objectResult.StatusCode);
+
+            var errorResponse = objectResult.Value as ErrorResponseDto;
+            Assert.NotNull(errorResponse);
+            Assert.False(errorResponse.Success, "Response should not indicate success.");
+            Assert.Equal("An error occurred while processing your request. Please try again later.", errorResponse.Message);
+            Assert.Equal(ErrorCodes.InternalServerError, errorResponse.ErrorCode);
+
+            _loggerMock.Verify(
+                log => log.Log(
+                    LogLevel.Error,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("An unexpected error occurred while request password reset.")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception, string>>()
+                ),
+                Times.Once
+            );
+        }
+
+
+        [Fact]
+        public async Task RequestPasswordReset_Should_Include_Valid_Link_In_Email()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+
+            var dto = new ResetPasswordRequestDto
+            {
+                Email = "exitinguser@example.com",
+            };
+
+            var mockUrlHelper = new Mock<IUrlHelper>();
+            mockUrlHelper
+                .Setup(u => u.Action(It.IsAny<UrlActionContext>()))
+                .Returns("https://test-url.com/reset-password");
+
+            _controller.Url = mockUrlHelper.Object;
+
+            // Act
+            var result = await _controller.RequestPasswordReset(dto);
+
+            // Assert
+            _mockEmailService.Verify(es =>
+                es.SendEmailAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.Is<string>(body => body.Contains("https://test-url.com/reset-password"))
+                ),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task RequestPasswordReset_Should_Update_User_With_Token_And_Expiry()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var requestDto = new ResetPasswordRequestDto
+            {
+                Email = "exitinguser@example.com"
+            };
+
+            // Act
+            await _controller.RequestPasswordReset(requestDto);
+
+            // Assert
+            var userInDb = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == requestDto.Email);
+            Assert.NotNull(userInDb);
+            Assert.NotEmpty(userInDb.ResetToken);
+            Assert.True(userInDb.ResetTokenExpiry > DateTime.UtcNow);
+        }
+
+        [Fact]
+        public async Task RequestPasswordReset_Should_Return_InternalServerError_When_EmailService_Fails()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var requestDto = new ResetPasswordRequestDto
+            {
+                Email = "exitinguser@example.com"
+            };
+
+            _mockEmailService
+                .Setup(es => es.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ThrowsAsync(new Exception("Email sending failed"));
+
+            var mockUrlHelper = new Mock<IUrlHelper>();
+            mockUrlHelper
+                .Setup(u => u.Action(It.IsAny<UrlActionContext>()))
+                .Returns("https://test-url.com/reset-password");
+
+            _controller.Url = mockUrlHelper.Object;
+
+            // Act
+            var result = await _controller.RequestPasswordReset(requestDto);
+
+            // Assert
+            Assert.IsType<ObjectResult>(result);
+
+            var objectResult = result as ObjectResult;
+            Assert.NotNull(objectResult);
+            Assert.Equal(500, objectResult.StatusCode);
+
+            var errorResponse = objectResult.Value as ErrorResponseDto;
+            Assert.NotNull(errorResponse);
+            Assert.False(errorResponse.Success, "Response should indicate failure.");
+            Assert.Equal("An error occurred while processing your request. Please try again later.", errorResponse.Message);
+            Assert.Equal(ErrorCodes.InternalServerError, errorResponse.ErrorCode);
+        }
+
+        #endregion
+
+        #region /api/Auth/reset-password
+
+        [Theory]
+        [InlineData("", "ValidPassword123!", "Token is required.")]
+        [InlineData("valid-token", "", "New password is required.")]
+        [InlineData("", "", "Token is required.")]
+        public async Task ResetPassword_Should_Return_BadRequest_When_Model_Is_Invalid(string token, string newPassword, string expectedErrorMessage)
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var resetPasswordDto = new ResetPasswordDto
+            {
+                Token = token,
+                NewPassword = newPassword
+            };
+
+            // Act
+            var result = await _controller.ResetPassword(resetPasswordDto);
+
+            // Assert
+            Assert.IsType<BadRequestObjectResult>(result);
+
+            var badRequestResult = result as BadRequestObjectResult;
+            Assert.NotNull(badRequestResult);
+
+            var response = badRequestResult.Value as ErrorResponseDto;
+            Assert.NotNull(response);
+            Assert.False(response.Success, "Response should indicate failure.");
+            Assert.Equal(ErrorCodes.ValidationError, response.ErrorCode);
+            Assert.Equal("Validation failed.", response.Message);
+            Assert.NotNull(response.TraceId);
+
+            Assert.Contains(expectedErrorMessage, response.Errors.Values.SelectMany(e => e));
+        }
+
+
+        [Fact]
+        public async Task ResetPassword_Should_Return_BadRequest_When_User_Not_Found()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var resetPasswordDto = new ResetPasswordDto
+            {
+                Token = "non-existing-token",
+                NewPassword = "ValidPassword123!"
+            };
+
+            // Act
+            var result = await _controller.ResetPassword(resetPasswordDto);
+
+            // Assert
+            Assert.IsType<BadRequestObjectResult>(result);
+
+            var badRequestResult = result as BadRequestObjectResult;
+            Assert.NotNull(badRequestResult);
+
+            var response = badRequestResult.Value as ErrorResponseDto;
+            Assert.NotNull(response);
+            Assert.False(response.Success, "Response should indicate failure.");
+            Assert.Equal(ErrorCodes.UserNotFound, response.ErrorCode);
+            Assert.Equal("User not found.", response.Message);
+            Assert.NotNull(response.TraceId);
+        }
+
+        [Fact]
+        public async Task ResetPassword_Should_Return_BadRequest_When_Token_Is_Missing()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var resetPasswordDto = new ResetPasswordDto
+            {
+                Token = string.Empty, // Brak tokenu
+                NewPassword = "ValidPassword123!"
+            };
+
+            // Act
+            var result = await _controller.ResetPassword(resetPasswordDto);
+
+            // Assert
+            Assert.IsType<BadRequestObjectResult>(result);
+
+            var badRequestResult = result as BadRequestObjectResult;
+            Assert.NotNull(badRequestResult);
+
+            var response = badRequestResult.Value as ErrorResponseDto;
+            Assert.NotNull(response);
+            Assert.False(response.Success, "Response should indicate failure.");
+            Assert.Equal(ErrorCodes.ValidationError, response.ErrorCode);
+            Assert.Equal("Validation failed.", response.Message);
+            Assert.NotNull(response.TraceId);
+
+            // Sprawdzamy, że w odpowiedzi znajdują się odpowiednie błędy walidacji
+            Assert.NotNull(response.Errors);
+            Assert.Contains(nameof(resetPasswordDto.Token), response.Errors.Keys);
+            Assert.Contains("Token is required.", response.Errors[nameof(resetPasswordDto.Token)]);
+        }
+
+        [Fact]
+        public async Task ResetPassword_Should_Return_BadRequest_When_Token_Is_Expired()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var expiredUser = new User
+            {
+                Email = "expired@example.com",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("OldPassword123!"),
+                ResetToken = "expired-token",
+                ResetTokenExpiry = DateTime.UtcNow.AddHours(-1) // Token wygasł
+            };
+
+            _dbContext.Users.Add(expiredUser);
+            await _dbContext.SaveChangesAsync();
+
+            var resetPasswordDto = new ResetPasswordDto
+            {
+                Token = "expired-token",
+                NewPassword = "NewValidPassword123!"
+            };
+
+            // Act
+            var result = await _controller.ResetPassword(resetPasswordDto);
+
+            // Assert
+            Assert.IsType<BadRequestObjectResult>(result);
+
+            var badRequestResult = result as BadRequestObjectResult;
+            Assert.NotNull(badRequestResult);
+
+            var response = badRequestResult.Value as ErrorResponseDto;
+            Assert.NotNull(response);
+            Assert.False(response.Success, "Response should indicate failure.");
+            Assert.Equal(ErrorCodes.ExpiredToken, response.ErrorCode);
+            Assert.Equal("Expired token.", response.Message);
+            Assert.NotNull(response.TraceId);
+        }
+
+        [Fact]
+        public async Task ResetPassword_Should_Return_InternalServerError_When_Exception_Is_Thrown()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var validUser = new User
+            {
+                Email = "user@example.com",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("OldPassword123!"),
+                ResetToken = "valid-token",
+                ResetTokenExpiry = DateTime.UtcNow.AddHours(1)
+            };
+
+            _dbContext.Users.Add(validUser);
+            await _dbContext.SaveChangesAsync();
+
+            var resetPasswordDto = new ResetPasswordDto
+            {
+                Token = "valid-token",
+                NewPassword = "NewPassword123!"
+            };
+
+            // Symulacja wyjątku poprzez usunięcie kontekstu
+            _dbContext.Dispose();
+
+            // Act
+            var result = await _controller.ResetPassword(resetPasswordDto);
+
+            // Assert
+            Assert.IsType<ObjectResult>(result);
+
+            var objectResult = result as ObjectResult;
+            Assert.NotNull(objectResult);
+            Assert.Equal(500, objectResult.StatusCode);
+
+            var response = objectResult.Value as ErrorResponseDto;
+            Assert.NotNull(response);
+            Assert.False(response.Success, "Response should not indicate success.");
+            Assert.Equal(ErrorCodes.InternalServerError, response.ErrorCode);
+            Assert.Equal("An error occurred while processing your request. Please try again later.", response.Message);
+            Assert.NotNull(response.TraceId);
+
+            // Sprawdzenie logowania błędu
+            _loggerMock.Verify(
+                log => log.Log(
+                    LogLevel.Error,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("An unexpected error occurred while resetting the password.")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception, string>>()
+                ),
+                Times.Once
+            );
+        }
+
+
+        #endregion
+
+        #region /api/Auth/logout
+        [Fact]
+        public async Task Logout_Should_Return_BadRequest_When_Authorization_Header_Is_Missing()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+
+            // Act
+            var result = await _controller.Logout();
+
+            // Assert
+            Assert.IsType<BadRequestObjectResult>(result);
+
+            var badRequestResult = result as BadRequestObjectResult;
+            Assert.NotNull(badRequestResult);
+
+            var response = badRequestResult.Value as ErrorResponseDto;
+            Assert.NotNull(response);
+            Assert.False(response.Success);
+            Assert.Equal("Authorization header is missing or invalid.", response.Message);
+            Assert.Equal(ErrorCodes.InvalidAuthorizationHeader, response.ErrorCode);
+            Assert.NotNull(response.TraceId);
+        }
+
+        [Fact]
+        public async Task Logout_Should_Return_BadRequest_When_Authorization_Header_Is_Invalid()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            httpContext.Request.Headers["Authorization"] = "InvalidTokenFormat";
+            _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+
+            // Act
+            var result = await _controller.Logout();
+
+            // Assert
+            Assert.IsType<BadRequestObjectResult>(result);
+
+            var badRequestResult = result as BadRequestObjectResult;
+            Assert.NotNull(badRequestResult);
+
+            var response = badRequestResult.Value as ErrorResponseDto;
+            Assert.NotNull(response);
+            Assert.False(response.Success);
+            Assert.Equal("Authorization header is missing or invalid.", response.Message);
+            Assert.Equal(ErrorCodes.InvalidAuthorizationHeader, response.ErrorCode);
+            Assert.NotNull(response.TraceId);
+        }
+
+        [Fact]
+        public async Task Logout_Should_Return_BadRequest_When_Token_Is_Invalid()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            httpContext.Request.Headers["Authorization"] = "Bearer InvalidToken";
+            _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+
+            // Mockowanie GetTokenExpiryDate, aby zwróciło null
+            _controller.GetType()
+                .GetMethod("GetTokenExpiryDate", BindingFlags.NonPublic | BindingFlags.Instance)
+                .Invoke(_controller, new object[] { "InvalidToken" });
+
+            // Act
+            var result = await _controller.Logout();
+
+            // Assert
+            Assert.IsType<BadRequestObjectResult>(result);
+
+            var badRequestResult = result as BadRequestObjectResult;
+            Assert.NotNull(badRequestResult);
+
+            var response = badRequestResult.Value as ErrorResponseDto;
+            Assert.NotNull(response);
+            Assert.False(response.Success);
+            Assert.Equal("Invalid token.", response.Message);
+            Assert.Equal(ErrorCodes.InvalidToken, response.ErrorCode);
+            Assert.NotNull(response.TraceId);
+        }
+
+        [Fact]
+        public async Task Logout_Should_Return_BadRequest_When_Token_Has_Expired()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+
+            // Wygeneruj token, który symuluje wygasły token
+            var expiredToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2MDAwMDAwMDB9._token_signature";
+            httpContext.Request.Headers["Authorization"] = $"Bearer {expiredToken}";
+
+            // Użyj refleksji do wywołania prywatnej metody
+            var method = typeof(AuthController).GetMethod("GetTokenExpiryDate", BindingFlags.NonPublic | BindingFlags.Instance);
+            var expiryDate = method.Invoke(_controller, new object[] { expiredToken }) as DateTime?;
+
+            // Upewnij się, że data wygaśnięcia jest w przeszłości
+            Assert.NotNull(expiryDate);
+            Assert.True(expiryDate < DateTime.UtcNow);
+
+            // Act
+            var result = await _controller.Logout();
+
+            // Assert
+            Assert.IsType<BadRequestObjectResult>(result);
+
+            var badRequestResult = result as BadRequestObjectResult;
+            Assert.NotNull(badRequestResult);
+
+            var response = badRequestResult.Value as ErrorResponseDto;
+            Assert.NotNull(response);
+            Assert.False(response.Success);
+            Assert.Equal("Token has already expired.", response.Message);
+            Assert.Equal(ErrorCodes.ExpiredToken, response.ErrorCode);
+            Assert.NotNull(response.TraceId);
+        }
+
+
+
+        private string GenerateExpiredToken()
+        {
+            var handler = new JwtSecurityTokenHandler();
+            var key = Encoding.UTF8.GetBytes("ThisIsASuperLongSecretKeyThatHasEnoughLength123!");
+
+            var now = DateTime.UtcNow;
+
+            var descriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(new[]
+                {
+            new Claim(ClaimTypes.NameIdentifier, "1"),
+            new Claim(ClaimTypes.Role, "User")
+        }),
+                NotBefore = now.AddMinutes(-20), // Czas rozpoczęcia ważności tokena (20 minut temu)
+                Expires = now.AddMinutes(-10),  // Czas wygaśnięcia tokena (10 minut temu)
+                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+            };
+
+            var token = handler.CreateToken(descriptor);
+            return handler.WriteToken(token);
+        }
+
+
+        [Fact]
+        public async Task Logout_Should_Return_Ok_When_Token_Is_Revoked_Successfully()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+
+            // Użycie istniejącej metody GenerateToken do wygenerowania poprawnego tokena
+            var validToken = _tokenService.GenerateToken(userId: 1, role: "User");
+            var expiryDate = DateTime.UtcNow.AddMinutes(10); // Czas wygaśnięcia tokena
+
+            // Ustawienie nagłówka Authorization z poprawnym tokenem
+            httpContext.Request.Headers["Authorization"] = $"Bearer {validToken}";
+
+            // Act
+            var result = await _controller.Logout();
+
+            // Assert
+            Assert.IsType<OkObjectResult>(result);
+
+            var okResult = result as OkObjectResult;
+            Assert.NotNull(okResult);
+
+            var response = okResult.Value as SuccessResponseDto<object>;
+            Assert.NotNull(response);
+            Assert.True(response.Success);
+            Assert.Equal("Logged out successfully.", response.Message);
+            Assert.NotNull(response.TraceId);
+
+            // Weryfikacja, że token został dodany do RevokedTokens
+            var revokedToken = await _dbContext.RevokedTokens.FirstOrDefaultAsync(t => t.Token == validToken);
+            Assert.NotNull(revokedToken);
+            Assert.Equal(validToken, revokedToken.Token);
+            Assert.True(revokedToken.ExpiryDate > DateTime.UtcNow);
+        }
+
+
+
+        [Fact]
+        public async Task Logout_Should_Return_InternalServerError_When_Exception_Is_Thrown()
+        {
+            // Arrange
+
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+
+
+            // Użycie istniejącej metody GenerateToken do wygenerowania poprawnego tokena
+            var validToken = _tokenService.GenerateToken(userId: 1, role: "User");
+            var expiryDate = DateTime.UtcNow.AddMinutes(10); // Czas wygaśnięcia tokena
+
+            // Ustawienie nagłówka Authorization z poprawnym tokenem
+            httpContext.Request.Headers["Authorization"] = $"Bearer {validToken}";
+
+
+            // Mockowanie bazy danych, aby rzucała wyjątek podczas zapisu
+            _dbContext.Dispose();
+
+            // Act
+            var result = await _controller.Logout();
+
+            // Assert
+            Assert.IsType<ObjectResult>(result);
+
+            var objectResult = result as ObjectResult;
+            Assert.NotNull(objectResult);
+            Assert.Equal(500, objectResult.StatusCode);
+
+            var response = objectResult.Value as ErrorResponseDto;
+            Assert.NotNull(response);
+            Assert.False(response.Success);
+            Assert.Equal("An error occurred while logging out. Please try again later.", response.Message);
+            Assert.Equal(ErrorCodes.InternalServerError, response.ErrorCode);
+            Assert.NotNull(response.TraceId);
+        }
 
 
         #endregion

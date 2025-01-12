@@ -1,4 +1,5 @@
-﻿using BudgetManagerAPI.Data;
+﻿using BudgetManagerAPI.Constants;
+using BudgetManagerAPI.Data;
 using BudgetManagerAPI.DTO;
 using BudgetManagerAPI.Interfaces;
 using BudgetManagerAPI.Models;
@@ -50,7 +51,7 @@ namespace BudgetManagerAPI.Controllers
                 {
                     Success = false,
                     Message = "Validation failed.",
-                    ErrorCode = "VALIDATION_ERROR",
+                    ErrorCode = ErrorCodes.ValidationError,
                     Errors = errors,
                     TraceId = HttpContext.TraceIdentifier
                 });
@@ -63,7 +64,7 @@ namespace BudgetManagerAPI.Controllers
                 {
                     Success = false,
                     Message = "Passwords do not match.",
-                    ErrorCode = "PASSWORDS_MISMATCH",
+                    ErrorCode = ErrorCodes.PasswordsMismatch,
                     TraceId = HttpContext.TraceIdentifier
                 });
             }
@@ -75,7 +76,7 @@ namespace BudgetManagerAPI.Controllers
                 {
                     Success = false,
                     Message = "User already exists.",
-                    ErrorCode = "USER_ALREADY_EXISTS",
+                    ErrorCode = ErrorCodes.UserAlreadyExists,
                     TraceId = HttpContext.TraceIdentifier
                 });
             }
@@ -156,7 +157,7 @@ namespace BudgetManagerAPI.Controllers
 
                     Success = false,
                     Message = "An error occurred while processing your request. Please try again later.",
-                    ErrorCode = "INTERNAL_SERVER_ERROR",
+                    ErrorCode = ErrorCodes.InternalServerError,
                     TraceId = HttpContext.TraceIdentifier
                 });
             }
@@ -171,7 +172,7 @@ namespace BudgetManagerAPI.Controllers
                 return BadRequest(new ErrorResponseDto
                 {
                     Message = "Invalid confirmation request.",
-                    ErrorCode = "MISSING_TOKEN",
+                    ErrorCode = ErrorCodes.MissingToken,
                     TraceId = HttpContext.TraceIdentifier
                 });
             }
@@ -186,7 +187,7 @@ namespace BudgetManagerAPI.Controllers
                     {
                         Success = false,
                         Message = "Invalid activation token.",
-                        ErrorCode = "INVALID_ACTIVATION_TOKEN",
+                        ErrorCode = ErrorCodes.InvalidToken,
                         TraceId = HttpContext.TraceIdentifier
                     });
                 }
@@ -198,7 +199,7 @@ namespace BudgetManagerAPI.Controllers
                     {
                         Success = false,
                         Message = "User is already active.",
-                        ErrorCode = "USER_ALREADY_ACTIVE",
+                        ErrorCode = ErrorCodes.UserAlreadyActive,
                         TraceId = HttpContext.TraceIdentifier
                     });
                 }
@@ -228,7 +229,7 @@ namespace BudgetManagerAPI.Controllers
                 {
                     Success = false,
                     Message = "An error occurred while processing your request. Please try again later.",
-                    ErrorCode = "INTERNAL_SERVER_ERROR",
+                    ErrorCode = ErrorCodes.InternalServerError,
                     TraceId = HttpContext.TraceIdentifier
                 });
             }
@@ -249,7 +250,7 @@ namespace BudgetManagerAPI.Controllers
                 {
                     Success = false,
                     Message = "Validation failed.",
-                    ErrorCode = "VALIDATION_ERROR",
+                    ErrorCode = ErrorCodes.ValidationError,
                     Errors = errors,
                     TraceId = HttpContext.TraceIdentifier
                 });
@@ -264,7 +265,7 @@ namespace BudgetManagerAPI.Controllers
                     {
                         Success = false,
                         Message = "User not found.",
-                        ErrorCode = "USER_NOT_FOUND",
+                        ErrorCode = ErrorCodes.UserNotFound,
                         TraceId = HttpContext.TraceIdentifier
                     });
                 }
@@ -275,7 +276,7 @@ namespace BudgetManagerAPI.Controllers
                     {
                         Success = false,
                         Message = "User is already active.",
-                        ErrorCode = "USER_ALREADY_ACTIVE",
+                        ErrorCode = ErrorCodes.UserAlreadyActive,
                         TraceId = HttpContext.TraceIdentifier
                     });
                 }
@@ -304,7 +305,7 @@ namespace BudgetManagerAPI.Controllers
                     Data = new ResendActivationLinkResponseDto { Email = user.Email }
                 });
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 {
                     _logger.LogError(ex, "An unexpected error occurred. TraceId: {TraceId}", HttpContext.TraceIdentifier);
@@ -312,12 +313,12 @@ namespace BudgetManagerAPI.Controllers
                     {
                         Success = false,
                         Message = "An error occurred while processing your request. Please try again later.",
-                        ErrorCode = "INTERNAL_SERVER_ERROR",
+                        ErrorCode = ErrorCodes.InternalServerError,
                         TraceId = HttpContext.TraceIdentifier
                     });
                 }
             }
-            
+
         }
 
 
@@ -345,7 +346,7 @@ namespace BudgetManagerAPI.Controllers
                 {
                     Success = false,
                     Message = "Validation failed.",
-                    ErrorCode = "VALIDATION_ERROR",
+                    ErrorCode = ErrorCodes.ValidationError,
                     Errors = errors,
                     TraceId = HttpContext.TraceIdentifier
                 });
@@ -361,7 +362,7 @@ namespace BudgetManagerAPI.Controllers
                     {
                         Success = false,
                         Message = "Invalid email or password.",
-                        ErrorCode = "INVALID_CREDENTIALS",
+                        ErrorCode = ErrorCodes.InvalidCredentials,
                         TraceId = HttpContext.TraceIdentifier
                     });
                 }
@@ -373,7 +374,7 @@ namespace BudgetManagerAPI.Controllers
                     {
                         Success = false,
                         Message = "Account is not activated.",
-                        ErrorCode = "ACCOUNT_NOT_ACTIVATED",
+                        ErrorCode = ErrorCodes.AccountNotActivated,
                         TraceId = HttpContext.TraceIdentifier
                     });
                 }
@@ -399,7 +400,7 @@ namespace BudgetManagerAPI.Controllers
                 {
                     Success = false,
                     Message = "An error occurred while processing your request. Please try again later.",
-                    ErrorCode = "INTERNAL_SERVER_ERROR",
+                    ErrorCode = ErrorCodes.InternalServerError,
                     TraceId = HttpContext.TraceIdentifier
                 });
             }
@@ -408,61 +409,175 @@ namespace BudgetManagerAPI.Controllers
         [HttpPost("request-password-reset")]
         public async Task<IActionResult> RequestPasswordReset([FromBody] ResetPasswordRequestDto requestDto)
         {
-            if(!ModelState.IsValid)
+            if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                var errors = ModelState
+                 .Where(ms => ms.Value.Errors.Count > 0)
+                 .ToDictionary(
+                     kvp => kvp.Key,
+                     kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray()
+                 );
+
+                _logger.LogError("Model state is not valid.");
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Validation failed.",
+                    ErrorCode = ErrorCodes.ValidationError,
+                    Errors = errors,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
-            if (string.IsNullOrEmpty(requestDto.Email))
+            try
             {
-                _logger.LogError("Email is empty");
-                return BadRequest(new { Message = "Email is empty" });
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == requestDto.Email);
+                if (user == null)
+                {
+                    _logger.LogInformation("User with email {email} not found.", requestDto.Email);
+                    return NotFound(new ErrorResponseDto
+                    {
+                        Success = false,
+                        Message = "User with email not found.",
+                        TraceId = HttpContext.TraceIdentifier,
+                        ErrorCode = ErrorCodes.UserNotFound
+                    }
+                    );
+                }
+
+                var resetToken = Guid.NewGuid().ToString("N");
+                user.ResetToken = resetToken;
+                user.ResetTokenExpiry = DateTime.UtcNow.AddHours(1);
+                await _context.SaveChangesAsync();
+
+                // Wysyłanie e-maila aktywacyjnego
+                var activationLink = Url.Action(
+                    nameof(RequestPasswordReset),
+                    "Auth",
+                    new { token = user.ResetToken },
+                    protocol: HttpContext.Request.Scheme);
+
+                await _emailService.SendEmailAsync(user.Email, "Reset your password",
+                    $"Use the following link to reset your password: {activationLink}");
+
+                return Ok(new SuccessResponseDto<ResetPasswordResponseDto>
+                {
+                    Success = true,
+                    Message = "Password reset link sent to you email.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data = new ResetPasswordResponseDto { Email = requestDto.Email }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An unexpected error occurred while request password reset. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request. Please try again later.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == requestDto.Email);
-            if (user == null)
-            {
-                _logger.LogInformation("User with email {email} not found.", requestDto.Email);
-                return NotFound(new { Message = "User with email {email} not found.", requestDto.Email });
-            }
-
-            var resetToken = Guid.NewGuid().ToString("N");
-            user.ResetToken = resetToken;
-            user.ResetTokenExpiry = DateTime.UtcNow.AddHours(1);
-            await _context.SaveChangesAsync();
-
-            // Wysyłanie e-maila aktywacyjnego
-            var activationLink = Url.Action(
-                nameof(RequestPasswordReset),
-                "Auth",
-                new { token = user.ResetToken },
-                protocol: HttpContext.Request.Scheme);
-
-            await _emailService.SendEmailAsync(user.Email, "Reset your password",
-                $"Use the following link to reset your password: {activationLink}");
-
-            return Ok(new { Message = "Password reset link sent to you email." });
         }
 
         [HttpPost("reset-password")]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto model)
         {
-            if (string.IsNullOrEmpty(model.Token) || string.IsNullOrEmpty(model.NewPassword))
+            var errors = new Dictionary<string, string[]>();
+
+            if (string.IsNullOrEmpty(model.Token))
             {
-                return BadRequest(new { Message = "Token and new password are required." });
-            }
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.ResetToken == model.Token);
-            if (user == null || string.IsNullOrEmpty(user.ResetToken) || user.ResetTokenExpiry < DateTime.UtcNow)
-            {
-                return BadRequest(new { Message = "Invalid or expired token." });
+                errors[nameof(model.Token)] = new[] { "Token is required." };
             }
 
-            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(model.NewPassword);
-            user.ResetToken = string.Empty;
-            user.ResetTokenExpiry = null;
-            await _context.SaveChangesAsync();
+            if (string.IsNullOrEmpty(model.NewPassword))
+            {
+                errors[nameof(model.NewPassword)] = new[] { "New password is required." };
+            }
 
-            return Ok(new { Message = "Password reset successfully." });
+            if (errors.Count != 0)
+            {
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    ErrorCode = ErrorCodes.ValidationError,
+                    Message = "Validation failed.",
+                    Errors = errors,
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
+
+            try
+            {
+
+                // Wyszukiwanie użytkownika
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.ResetToken == model.Token);
+                if (user == null)
+                {
+                    return BadRequest(new ErrorResponseDto
+                    {
+                        Success = false,
+                        ErrorCode = ErrorCodes.UserNotFound,
+                        Message = "User not found.",
+                        TraceId = HttpContext.TraceIdentifier,
+                    });
+                }
+
+                if (string.IsNullOrEmpty(user.ResetToken))
+                {
+                    return BadRequest(new ErrorResponseDto
+                    {
+                        Success = false,
+                        ErrorCode = ErrorCodes.MissingToken,
+                        Message = "Missing token.",
+                        TraceId = HttpContext.TraceIdentifier
+                    });
+                }
+
+                if (user.ResetTokenExpiry < DateTime.UtcNow)
+                {
+                    return BadRequest(new ErrorResponseDto
+                    {
+                        Success = false,
+                        ErrorCode = ErrorCodes.ExpiredToken,
+                        Message = "Expired token.",
+                        TraceId = HttpContext.TraceIdentifier
+                    });
+                }
+
+
+
+
+                // Resetowanie hasła użytkownika
+                user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(model.NewPassword);
+                user.ResetToken = string.Empty;
+                user.ResetTokenExpiry = null;
+                await _context.SaveChangesAsync();
+
+                // Sukces
+                return Ok(new SuccessResponseDto<ResetPasswordResponseDto>
+                {
+                    Success = true,
+                    Message = "Password reset successfully.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data =  new ResetPasswordResponseDto{
+                        Email = user.Email,
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An unexpected error occurred while resetting the password. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request. Please try again later.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
         }
 
         [Authorize]
@@ -471,32 +586,47 @@ namespace BudgetManagerAPI.Controllers
         {
             _logger.LogInformation("Logout action triggered.");
 
-            // Pobranie nagłówka Authorization
+     
             var authHeader = Request.Headers["Authorization"].ToString();
             if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
             {
-                return BadRequest(new { Message = "Authorization header is missing or invalid." });
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Authorization header is missing or invalid.",
+                    ErrorCode = ErrorCodes.InvalidAuthorizationHeader,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
-            // Wyciągnięcie tokena
             var token = authHeader.Replace("Bearer ", "");
 
-            // Pobranie daty wygaśnięcia tokena
             var expiryDate = GetTokenExpiryDate(token);
             if (expiryDate == null)
             {
-                return BadRequest(new { Message = "Invalid token." });
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Invalid token.",
+                    ErrorCode = ErrorCodes.InvalidToken,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
-            // Sprawdzenie, czy token już wygasł
             if (expiryDate <= DateTime.UtcNow)
             {
-                return BadRequest(new { Message = "Token has already expired." });
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Token has already expired.",
+                    ErrorCode = ErrorCodes.ExpiredToken,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
             try
             {
-                // Dodanie tokena do tabeli RevokedTokens
+
                 _context.RevokedTokens.Add(new RevokedToken
                 {
                     Token = token,
@@ -505,15 +635,26 @@ namespace BudgetManagerAPI.Controllers
 
                 await _context.SaveChangesAsync();
 
-                return Ok(new { Message = "Logged out successfully." });
+                return Ok(new SuccessResponseDto<object>
+                {
+                    Success = true,
+                    Message = "Logged out successfully.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data = null
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to revoke token.");
-                return StatusCode(500, new { Message = "An error occurred while logging out. Please try again later." });
+                _logger.LogError(ex, "Failed to revoke token. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while logging out. Please try again later.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
         }
-
 
 
 
