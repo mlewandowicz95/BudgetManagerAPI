@@ -18,7 +18,7 @@ namespace BudgetManagerAPI.Services
             _jwtSettings = jwtSettings ?? throw new ArgumentNullException(nameof(jwtSettings));
         }
 
-        public string GenerateToken(int userId, string email, string role)
+        public string GenerateToken(int userId, string role)
         {
             if (string.IsNullOrEmpty(_jwtSettings.SecretKey))
             {
@@ -30,10 +30,10 @@ namespace BudgetManagerAPI.Services
 
             var claims = new[]
             {
-            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
-            new Claim(JwtRegisteredClaimNames.Sub, email),
-            new Claim(ClaimTypes.Role, role) // added role as claim
-        };
+        new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+        new Claim(ClaimTypes.Role, role), 
+        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()) 
+    };
 
             var token = new JwtSecurityToken(
                 _jwtSettings.Issuer,

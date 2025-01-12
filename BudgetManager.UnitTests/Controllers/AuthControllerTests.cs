@@ -19,6 +19,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Text;
 using System.Threading.Tasks;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace BudgetManager.UnitTests.Controllers
 {
@@ -67,14 +68,25 @@ namespace BudgetManager.UnitTests.Controllers
 
         private void SeedDatabase()
         {
-            _dbContext.Users.Add(new User
-            {
-                Id = 1,
-                Email = "exitinguser@example.com",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!"),
-                IsActive = true,
+            var users = new List<User>
+    {
+        new User
+        {
+            Id = 1,
+            Email = "exitinguser@example.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!"),
+            IsActive = true,
+        },
+        new User
+        {
+            Id = 2,
+            Email = "noactive@example.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!"),
+            IsActive = false,
+        }
+    };
 
-            });
+            _dbContext.Users.AddRange(users);
             _dbContext.SaveChanges();
         }
 
@@ -674,5 +686,256 @@ namespace BudgetManager.UnitTests.Controllers
 
         #endregion
 
+
+        #region /api/Auth/resend-activasion-link
+        [Fact]
+        public async Task ResendActivationLink_Should_Return_Ok_When_Link_Is_Resent()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var dto = new ResendActivationLinkRequestDto
+            {
+                Email = "noactive@example.com"
+            };
+
+            var mockUrlHelper = new Mock<IUrlHelper>();
+            mockUrlHelper
+                .Setup(u => u.Action(It.IsAny<UrlActionContext>()))
+                .Returns("https://test-url.com/activate");
+
+            _controller.Url = mockUrlHelper.Object;
+
+            // act
+            var result = await _controller.ResendActivationLink(dto);
+
+            // Assert
+            Assert.IsType<OkObjectResult>(result);
+
+            var okResult = result as OkObjectResult;
+            Assert.NotNull(okResult);
+
+            var response = okResult.Value as SuccessResponseDto<ResendActivationLinkResponseDto>;
+            Assert.NotNull(response);
+            Assert.True(response.Success, "Respone should indicate success.");
+            Assert.Equal("Activation link has been resent.", response.Message);
+            Assert.NotNull(response.TraceId);
+
+            var data = response.Data;
+            Assert.NotNull(data);
+            Assert.Equal(dto.Email, response.Data.Email);
+
+            var userInDb = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
+            Assert.NotNull(userInDb);
+            Assert.False(userInDb.IsActive, "User should still be inactive.");
+            Assert.NotEmpty(userInDb.ActivationToken);
+
+            _mockEmailService.Verify(es =>
+            es.SendEmailAsync(
+                It.Is<string>(email => email == dto.Email),
+                It.Is<string>(subject => subject.Contains("Activate your account")),
+                It.Is<string>(body => body.Contains("Click the link to activate your account"))
+                ), Times.Once);
+        }
+
+        [Theory]
+        [InlineData("", "Email is required")] // Pusty email
+        public async Task ResendActivationLink_ShouldReturn_BadRequest_When_Email_Is_Missing(string email, string expectedErrorMessage)
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var dto = new ResendActivationLinkRequestDto
+            {
+                Email = email,
+            };
+
+
+            var mockUrlHelper = new Mock<IUrlHelper>();
+            mockUrlHelper
+                .Setup(u => u.Action(It.IsAny<UrlActionContext>()))
+                .Returns("https://test-url.com/activate");
+
+            _controller.Url = mockUrlHelper.Object;
+
+
+
+            // Ręczna walidacja ModelState
+            var validationContext = new ValidationContext(dto);
+            var validationResults = new List<ValidationResult>();
+            Validator.TryValidateObject(dto, validationContext, validationResults, true);
+
+            foreach (var validationResult in validationResults)
+            {
+                foreach (var memberName in validationResult.MemberNames)
+                {
+                    _controller.ModelState.AddModelError(memberName, validationResult.ErrorMessage);
+                }
+            }
+
+
+            // Act
+            var result = await _controller.ResendActivationLink(dto);
+
+            // Arrange
+            Assert.IsType<BadRequestObjectResult>(result);
+
+            var badRequestResult = result as BadRequestObjectResult;
+            Assert.NotNull(badRequestResult);
+
+            var response = badRequestResult.Value as ErrorResponseDto;
+            Assert.NotNull(response);
+            Assert.False(response.Success, "Response should indicate failure.");
+            Assert.Equal("Validation failed.", response.Message);
+            Assert.Equal("VALIDATION_ERROR", response.ErrorCode);
+            Assert.NotNull(response.TraceId);
+
+            // Sprawdzenie błędów w odpowiedzi
+            Assert.NotNull(response.Errors);
+            Assert.True(response.Errors.ContainsKey("Email"), "Response should contain validation errors for Email.");
+            Assert.Contains(expectedErrorMessage, response.Errors["Email"]);
+        }
+
+        [Fact]
+        public async Task ResendActivationLink_ShouldReturn_NotFound_When_User_Does_Not_Exist()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var dto = new ResendActivationLinkRequestDto
+            {
+                Email = "noexistusers@example.com"
+            };
+
+            var mockUrlHelper = new Mock<IUrlHelper>();
+            mockUrlHelper
+                .Setup(u => u.Action(It.IsAny<UrlActionContext>()))
+                .Returns("https://test-url.com/activate");
+
+            _controller.Url = mockUrlHelper.Object;
+
+            // act
+            var result = await _controller.ResendActivationLink(dto);
+
+            Assert.IsType<NotFoundObjectResult>(result);
+
+            var notFoundObjectResult = result as NotFoundObjectResult;
+            Assert.NotNull(notFoundObjectResult);
+
+            var response = notFoundObjectResult.Value as ErrorResponseDto;
+            Assert.NotNull(response);
+            Assert.False(response.Success, "Response should indicate failure.");
+            Assert.Equal("User not found.", response.Message);
+            Assert.Equal("USER_NOT_FOUND", response.ErrorCode);
+            Assert.NotNull(response.TraceId);
+
+
+        }
+
+        [Fact]
+        public async Task ResendActivationLink_ShouldReturn_BadRequest_When_User_Is_Already_Active()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var dto = new ResendActivationLinkRequestDto
+            {
+                Email = "exitinguser@example.com",
+            };
+
+            var mockUrlHelper = new Mock<IUrlHelper>();
+            mockUrlHelper
+                .Setup(u => u.Action(It.IsAny<UrlActionContext>()))
+                .Returns("https://test-url.com/activate");
+
+            _controller.Url = mockUrlHelper.Object;
+
+            // act
+            var result = await _controller.ResendActivationLink(dto);
+
+            Assert.IsType<BadRequestObjectResult>(result);
+
+            var badRequestResult = result as BadRequestObjectResult;
+            Assert.NotNull(badRequestResult);
+
+            var response = badRequestResult.Value as ErrorResponseDto;
+            Assert.NotNull(response);
+            Assert.False(response.Success, "Response should indicate failure.");
+            Assert.Equal("User is already active.", response.Message);
+            Assert.Equal("USER_ALREADY_ACTIVE", response.ErrorCode);
+            Assert.NotNull(response.TraceId);
+
+        }
+
+        [Fact]
+        public async Task ResendActivationLink_Should_Return_InternalServerError_When_Exception_Is_Thrown()
+        {
+            // Arrange
+            var httpContext = new DefaultHttpContext();
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            var dto = new ResendActivationLinkRequestDto
+            {
+                Email = "noactive@example.com"
+            };
+
+
+      
+            _dbContext.Dispose(); // Wymuszenie błędu przy kolejnym dostępie do bazy
+
+            var mockUrlHelper = new Mock<IUrlHelper>();
+            mockUrlHelper
+                .Setup(u => u.Action(It.IsAny<UrlActionContext>()))
+                .Returns("https://test-url.com/activate");
+
+            _controller.Url = mockUrlHelper.Object;
+
+            // Act
+            var result = await _controller.ResendActivationLink(dto);
+
+            // Assert
+            Assert.IsType<ObjectResult>(result);
+            var objectResult = result as ObjectResult;
+            Assert.NotNull(objectResult);
+            Assert.Equal(500, objectResult.StatusCode);
+
+            var errorResponse = objectResult.Value as ErrorResponseDto;
+            Assert.NotNull(errorResponse);
+            Assert.False(errorResponse.Success, "Response should not indicate success.");
+            Assert.Equal("An error occurred while processing your request. Please try again later.", errorResponse.Message);
+            Assert.Equal("INTERNAL_SERVER_ERROR", errorResponse.ErrorCode);
+
+            _loggerMock.Verify(
+                log => log.Log(
+                    LogLevel.Error,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("An unexpected error occurred.")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception, string>>()
+                ),
+                Times.Once
+            );
+        }
+
+        #endregion
     }
 }

@@ -236,39 +236,90 @@ namespace BudgetManagerAPI.Controllers
             }
         }
         [HttpPost("resend-activasion-link")]
-        public async Task<IActionResult> ResendActivationLink([FromBody] ResendActivationRequestDto request)
+        public async Task<IActionResult> ResendActivationLink([FromBody] ResendActivationLinkRequestDto request)
         {
-            if(!ModelState.IsValid)
+            if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                var errors = ModelState
+                    .Where(ms => ms.Value.Errors.Count > 0)
+                    .ToDictionary(
+                        kvp => kvp.Key,
+                        kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray()
+                    );
+
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Validation failed.",
+                    ErrorCode = "VALIDATION_ERROR",
+                    Errors = errors,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
-            if(user == null)
+            try
             {
-                return NotFound(new { Message = "User not found." });
-            }
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+                if (user == null)
+                {
+                    return NotFound(new ErrorResponseDto
+                    {
+                        Success = false,
+                        Message = "User not found.",
+                        ErrorCode = "USER_NOT_FOUND",
+                        TraceId = HttpContext.TraceIdentifier
+                    });
+                }
 
-            if (user.IsActive)
+                if (user.IsActive)
+                {
+                    return BadRequest(new ErrorResponseDto
+                    {
+                        Success = false,
+                        Message = "User is already active.",
+                        ErrorCode = "USER_ALREADY_ACTIVE",
+                        TraceId = HttpContext.TraceIdentifier
+                    });
+                }
+
+                user.ActivationToken = Guid.NewGuid().ToString("N");
+                await _context.SaveChangesAsync();
+
+                var activationLink = Url.Action(
+                    nameof(ConfirmEmail),
+                    "Auth",
+                    new { token = user.ActivationToken },
+                    protocol: HttpContext.Request.Scheme
+                    );
+
+                await _emailService.SendEmailAsync(user.Email, "Activate your account",
+                    $"Click the link to activate your account: {activationLink}"
+                    );
+
+                _logger.LogInformation("Activation link has been resent for email: {Email}. TraceId: {TraceId}", user.Email, HttpContext.TraceIdentifier);
+
+                return Ok(new SuccessResponseDto<ResendActivationLinkResponseDto>
+                {
+                    Success = true,
+                    Message = "Activation link has been resent.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data = new ResendActivationLinkResponseDto { Email = user.Email }
+                });
+            }
+            catch(Exception ex)
             {
-                return BadRequest(new { Message = "User is already active." });
+                {
+                    _logger.LogError(ex, "An unexpected error occurred. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                    return StatusCode(500, new ErrorResponseDto
+                    {
+                        Success = false,
+                        Message = "An error occurred while processing your request. Please try again later.",
+                        ErrorCode = "INTERNAL_SERVER_ERROR",
+                        TraceId = HttpContext.TraceIdentifier
+                    });
+                }
             }
-
-            user.ActivationToken = Guid.NewGuid().ToString("N");
-            await _context.SaveChangesAsync();
-
-            var activationLink = Url.Action(
-                nameof(ConfirmEmail),
-                "Auth",
-                new { token = user.ActivationToken },
-                protocol: HttpContext.Request.Scheme
-                );
-
-            await _emailService.SendEmailAsync(user.Email, "Activate your account",
-                $"Click the link to activate your account: {activationLink}"
-                );
-
-            return Ok(new { Message = "Activaion link has been resent." });
+            
         }
 
 
@@ -296,19 +347,13 @@ namespace BudgetManagerAPI.Controllers
 
             user.LastLogin = DateTime.UtcNow;
 
-            var token = _tokenService.GenerateToken(user.Id, user.Email, user.Role);
+            var token = _tokenService.GenerateToken(user.Id, user.Role);
 
             await _context.SaveChangesAsync();
 
             return Ok(new LoginResponseDto
             {
-                Token = token,
-                User = new UserResponseDto
-                {
-                    Id = user.Id,
-                    Email = user.Email,
-                    Role = user.Role
-                }
+                Token = token
             });
         }
 
