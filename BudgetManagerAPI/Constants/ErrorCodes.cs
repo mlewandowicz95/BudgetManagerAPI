@@ -23,5 +23,6 @@
 
         // Autoryzacja
         public const string InvalidAuthorizationHeader = "INVALID_AUTHORIZATION_HEADER";
+        public const string Unathorized = "UNATHORIZED";
     }
 }

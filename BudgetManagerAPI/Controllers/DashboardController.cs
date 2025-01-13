@@ -1,4 +1,5 @@
-﻿using BudgetManagerAPI.Data;
+﻿using BudgetManagerAPI.Constants;
+using BudgetManagerAPI.Data;
 using BudgetManagerAPI.DTO;
 using BudgetManagerAPI.Enums;
 using BudgetManagerAPI.Models;
@@ -25,199 +26,326 @@ namespace BudgetManagerAPI.Controllers
         }
 
 
-        [HttpGet("dashboard")]
+        [HttpGet]
         public async Task<IActionResult> GetDashboardSummary()
         {
             int parsedUsedId = GetParseUserId();
             if(parsedUsedId == 0)
             {
-                return Unauthorized(new { Message = "User is not authenticated." });
+                return Unauthorized(new ErrorResponseDto
+                {
+                    Success = false,
+                    TraceId = HttpContext.TraceIdentifier,
+                    Message = "User is not authenticated.",
+                    ErrorCode = ErrorCodes.Unathorized
+                });
             }
 
+
             var currentDate = DateTime.UtcNow;
-            var transactions = await _context.Transactions
-                .Include(t => t.Category)
-                .ToListAsync();
-
-            // podsumowanie p[rzytchodów i wydatków
-            var totalIncome = transactions.Where(t => t.Type == Enums.TransactionType.Income).Sum(t => t.Amount);
-            var totalExpenses = transactions.Where(t => t.Type == Enums.TransactionType.Expense).Sum(t => t.Amount);
+            try
+            {
 
 
-            // Ostatbnie transakcje (maks. 5)
-            var recentTransactions = transactions
-                .OrderByDescending(t => t.Date)
-                .Take(5)
-                .Select(t => new TransactionDto
+                var transactions = await _context.Transactions
+                    .Include(t => t.Category)
+                    .ToListAsync();
+
+                // podsumowanie p[rzytchodów i wydatków
+
+
+                var totalIncome = transactions.Where(t => t.Type == Enums.TransactionType.Income).Sum(t => t.Amount);
+                var totalExpenses = transactions.Where(t => t.Type == Enums.TransactionType.Expense).Sum(t => t.Amount);
+
+
+                // Ostatbnie transakcje (maks. 5)
+                var recentTransactions = transactions
+                    .OrderByDescending(t => t.Date)
+                    .Take(5)
+                    .Select(t => new TransactionDto
+                    {
+                        Date = t.Date,
+                        Amount = t.Amount,
+                        CategoryName = t.Category.Name,
+                        Description = t.Description,
+                        Type = t.Type.ToString()
+                    })
+                    .ToList();
+
+
+                // download all goals
+                var goals = await _context.Goals
+                    .Where(g => g.UserId == parsedUsedId)
+                    .OrderBy(g => g.DueDate ?? DateTime.MaxValue) // Najpierw cele z terminem
+                    .ThenBy(g => g.CurrentProgress / g.TargetAmount) // następnie wg procentu realizacji
+                    .ToListAsync();
+
+                var goalsDtos = goals.Select(g => new GoalDto
                 {
-                    Date = t.Date,
-                    Amount = t.Amount,
-                    CategoryName = t.Category.Name,
-                    Description = t.Description,
-                    Type = t.Type.ToString()
-                })
-                .ToList();
+                    Name = g.Name,
+                    TargetAmount = g.TargetAmount,
+                    CurrentProgress = g.CurrentProgress,
+                    DueDate = g.DueDate,
+                }).ToList();
 
-            // download all goals
-            var goals = await _context.Goals
-                .Where(g => g.UserId == parsedUsedId)
-                .OrderBy(g => g.DueDate ?? DateTime.MaxValue) // Najpierw cele z terminem
-                .ThenBy(g => g.CurrentProgress / g.TargetAmount) // następnie wg procentu realizacji
-                .ToListAsync();
 
-            var goalsDtos = goals.Select(g => new GoalDto
+                // build dashboard
+                var dashboardSummary = new DashbordSummaryDto
+                {
+                    TotalExpenses = totalExpenses,
+                    TotalIncome = totalIncome,
+                    RecentTransactions = recentTransactions,
+                    SavingGoals = goalsDtos
+                };
+
+                return Ok(new SuccessResponseDto<DashbordSummaryDto>
+                {
+                    Data = dashboardSummary,
+                    Success = true,
+                    Message = "Poprawnie pobrano dane.",
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
+            catch(Exception ex)
             {
-                Name = g.Name,
-                TargetAmount = g.TargetAmount,
-                CurrentProgress = g.CurrentProgress,
-                DueDate = g.DueDate,
-            }).ToList();
+                _logger.LogError(ex, "An error occurred while dowloading dashboard summary. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return StatusCode(500, new ErrorResponseDto
+                {
 
-
-            // build dashboard
-            var dashboardSummary = new DashbordSummaryDto
-            {
-                TotalExpenses = totalExpenses,
-                TotalIncome = totalIncome,
-                RecentTransactions = recentTransactions,
-                SavingGoals = goalsDtos
-            };
-
-            return Ok(dashboardSummary);
+                    Success = false,
+                    Message = "An error occurred while processing your request. Please try again later.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
         }
 
 
 
-        [HttpGet("dashboard/expenses-by-category")]
+        [HttpGet("expenses-by-category")]
         public async Task<IActionResult> GetExpensesByCategory()
         {
             int parsedUserId = GetParseUserId();
             if (parsedUserId == 0)
             {
-                return Unauthorized(new { Message = "User is not authenticated." });
+                return Unauthorized(new ErrorResponseDto
+                {
+                    Success = false,
+                    TraceId = HttpContext.TraceIdentifier,
+                    Message = "User is not authenticated.",
+                    ErrorCode = ErrorCodes.Unathorized
+                });
             }
 
 
-            var categoryExpenses = await _context.Transactions
-                .Where(t => t.UserId == parsedUserId && t.Type == TransactionType.Expense)
-                .GroupBy(t => t.Category.Name)
-                .Select(g => new
-                {
-                    Category = g.Key,
-                    TotalAmount = g.Sum(t => t.Amount)
-                })
-                .ToListAsync();
+            try
+            {
+                var categoryExpenses = await _context.Transactions
+                    .Where(t => t.UserId == parsedUserId && t.Type == TransactionType.Expense)
+                    .GroupBy(t => t.Category.Name)
+                    .Select(g => new CategoryExpenseDto
+                    {
+                        Category = g.Key,
+                        TotalAmount = g.Sum(t => t.Amount)
+                    })
+                    .ToListAsync();
 
-            return Ok(categoryExpenses);
+                return Ok(new SuccessResponseDto<List<CategoryExpenseDto>>
+                {
+                    Success = true,
+                    Message = "Data retrieved successfully.",
+                    TraceId= HttpContext.TraceIdentifier,
+                    Data = categoryExpenses 
+                });
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while dowloading expenses by category. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return StatusCode(500, new ErrorResponseDto
+                {
+
+                    Success = false,
+                    Message = "An error occurred while processing your request. Please try again later.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
+
         }
 
 
 
-        [HttpGet("dashboard/balance-per-month")]
+        [HttpGet("balance-per-month")]
         public async Task<IActionResult> GetBalancePerMonth()
         {
             int parsedUserId = GetParseUserId();
             if (parsedUserId == 0)
             {
-                return Unauthorized(new { Message = "User is not authenticated." });
-            }
-
-            var monthlyData = await _context.Transactions
-                .Where(t => t.UserId == parsedUserId)
-                .GroupBy(t => new { t.Date.Year, t.Date.Month })
-                .Select(g => new
+                return Unauthorized(new ErrorResponseDto
                 {
-                    Year = g.Key.Year,
-                    Month = g.Key.Month,
-                    Income = g.Where(t => t.Type == TransactionType.Income).Sum(t => t.Amount),
-                    Expenses = g.Where(t => t.Type == TransactionType.Expense).Sum(t => t.Amount)
-                })
-                .OrderByDescending(m => m.Month)
-                .Take(12)
-                .ToListAsync();
-
-            if(monthlyData.Count == 0)
-            {
-                return Ok(new { Message = "Data is empty." });
+                    Success = false,
+                    TraceId = HttpContext.TraceIdentifier,
+                    Message = "User is not authenticated.",
+                    ErrorCode = ErrorCodes.Unathorized
+                });
             }
 
-            var formattedData = monthlyData.Select(x => new
+            try
             {
-                Month = new DateTime(x.Year, x.Month, 1).ToString("MMMM yyyy"),
-                x.Income,
-                x.Expenses
-            }).ToList();
+                var monthlyData = await _context.Transactions
+                    .Where(t => t.UserId == parsedUserId)
+                    .GroupBy(t => new { t.Date.Year, t.Date.Month })
+                    .Select(g => new
+                    {
+                        Year = g.Key.Year,
+                        Month = g.Key.Month,
+                        Income = g.Sum(t => t.Type == TransactionType.Income ? t.Amount : 0),
+                        Expenses = g.Sum(t => t.Type == TransactionType.Expense ? t.Amount : 0)
+                    })
+                    .OrderByDescending(m => new { m.Year, m.Month })
+                    .Take(12) 
+                    .ToListAsync();
 
-            return Ok(formattedData);
+                if (!monthlyData.Any())
+                {
+                    return Ok(new SuccessResponseDto<List<BalancePerMonthDto>>
+                    {
+                        Success = true,
+                        Message = "No data found.",
+                        TraceId = HttpContext.TraceIdentifier,
+                        Data = new List<BalancePerMonthDto>()
+                    });
+                }
+
+                var formattedData = monthlyData.Select(x => new BalancePerMonthDto
+                {
+                    YearMonth = new DateTime(x.Year, x.Month, 1).ToString("MMMM yyyy"),
+                    Income = x.Income,
+                    Expenses = x.Expenses
+                }).ToList();
+
+                return Ok(new SuccessResponseDto<List<BalancePerMonthDto>>
+                {
+                    Success = true,
+                    Message = "Balance data retrieved successfully.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data = formattedData
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while downloading balance per month. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request. Please try again later.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
         }
 
 
-        [HttpGet("dashboard/budget-forecast")]
+        [HttpGet("budget-forecast")]
         public async Task<IActionResult> GetBudgetForecast()
         {
             int parsedUserId = GetParseUserId();
-            if(parsedUserId == 0)
+            if (parsedUserId == 0)
             {
-                return Unauthorized(new { Message = "User is not authenticated." });
-            }
-
-            var recurringTransactions = await _context.Transactions
-                .Include(t => t.Category)
-                .Where(t => t.UserId == parsedUserId && t.IsRecurring)
-                .ToListAsync();
-
-            decimal predicatedIncome = 0m;
-            decimal predicatedExpenses = 0m;
-
-            foreach(var transaction in recurringTransactions)
-            {
-                switch(transaction.Type)
+                return Unauthorized(new ErrorResponseDto
                 {
-                    case TransactionType.Income:
-                        predicatedIncome += CalculateRecurringAmount(transaction, DateTime.UtcNow, DateTime.UtcNow.AddMonths(1));
-                        break;
-
-                    case TransactionType.Expense:
-                        predicatedExpenses += CalculateRecurringAmount(transaction, DateTime.UtcNow, DateTime.UtcNow.AddMonths(1));
-                        break;
-                }
+                    Success = false,
+                    TraceId = HttpContext.TraceIdentifier,
+                    Message = "User is not authenticated.",
+                    ErrorCode = ErrorCodes.Unathorized
+                });
             }
 
-            var forecast = new BudgetForecastDto
+            try
             {
-                PredicatedExpenses = predicatedExpenses,
-                PredicatedIncome = predicatedIncome
-            };
+                var recurringTransactions = await _context.Transactions
+                    .Include(t => t.Category)
+                    .Where(t => t.UserId == parsedUserId && t.IsRecurring)
+                    .ToListAsync();
 
-            return Ok(forecast);
+                decimal predictedIncome = recurringTransactions
+                    .Where(t => t.Type == TransactionType.Income)
+                    .Sum(t => CalculateRecurringAmount(t, DateTime.UtcNow, DateTime.UtcNow.AddMonths(1)));
+
+                decimal predictedExpenses = recurringTransactions
+                    .Where(t => t.Type == TransactionType.Expense)
+                    .Sum(t => CalculateRecurringAmount(t, DateTime.UtcNow, DateTime.UtcNow.AddMonths(1)));
+
+                var forecast = new BudgetForecastDto
+                {
+                    PredicatedExpenses = predictedExpenses,
+                    PredicatedIncome = predictedIncome
+                };
+
+                return Ok(new SuccessResponseDto<BudgetForecastDto>
+                {
+                    Success = true,
+                    Message = "Budget forecast retrieved successfully.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data = forecast
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while calculating the budget forecast. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request. Please try again later.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
         }
+
 
         [HttpGet("financial-indicators")]
         public async Task<IActionResult> GetFinancialIndicators()
         {
             try
             {
+                // Pobranie UserId
                 var userId = GetParseUserId();
-                if(userId == 0)
+                if (userId == 0)
                 {
-                    return Unauthorized(new { Message = "Error in UserId" });
+                    return Unauthorized(new ErrorResponseDto
+                    {
+                        Success = false,
+                        TraceId = HttpContext.TraceIdentifier,
+                        Message = "User is not authenticated.",
+                        ErrorCode = ErrorCodes.Unathorized
+                    });
                 }
 
+                // Pobranie transakcji użytkownika
                 var transactions = await _context.Transactions
                     .Where(t => t.UserId == userId)
                     .ToListAsync();
 
-                if(transactions.Count == 0)
+                // Obsługa przypadku braku danych
+                if (!transactions.Any())
                 {
-                    return Ok(new FinancialIndicatorsDto
+                    return Ok(new SuccessResponseDto<FinancialIndicatorsDto>
                     {
-                        SavingsPercentage = 0,
-                        ExpensesToIncomeRatio = 0,
-                        AverageMonthlyExpenses = 0,
-                        AverageMonthlyIncome = 0
+                        Success = true,
+                        Message = "No transactions found.",
+                        TraceId = HttpContext.TraceIdentifier,
+                        Data = new FinancialIndicatorsDto
+                        {
+                            SavingsPercentage = 0,
+                            ExpensesToIncomeRatio = 0,
+                            AverageMonthlyExpenses = 0,
+                            AverageMonthlyIncome = 0
+                        }
                     });
                 }
 
+                // Obliczenia wskaźników
                 var income = transactions.Where(t => t.Type == TransactionType.Income).Sum(t => t.Amount);
                 var expenses = transactions.Where(t => t.Type == TransactionType.Expense).Sum(t => t.Amount);
 
@@ -226,10 +354,10 @@ namespace BudgetManagerAPI.Controllers
 
                 var averageMonthlyIncome = income / monthsActive;
                 var averageMonthlyExpenses = expenses / monthsActive;
-
                 var savingsPercentage = income > 0 ? ((income - expenses) / income) * 100 : 0;
-                var expensesToIncomeRatio = income > 0 ? (expenses - income) * 100 : 0;
+                var expensesToIncomeRatio = income > 0 ? (expenses / income) * 100 : 0;
 
+                // Utworzenie obiektu DTO
                 var indicators = new FinancialIndicatorsDto
                 {
                     SavingsPercentage = savingsPercentage,
@@ -238,14 +366,28 @@ namespace BudgetManagerAPI.Controllers
                     AverageMonthlyIncome = averageMonthlyIncome
                 };
 
-                return Ok(indicators);
+                // Zwrócenie odpowiedzi
+                return Ok(new SuccessResponseDto<FinancialIndicatorsDto>
+                {
+                    Success = true,
+                    Message = "Financial indicators calculated successfully.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data = indicators
+                });
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occurred while fetching financial indicators.");
-                return StatusCode(500, new { Message = "An error occurred while processing your request." });
+                _logger.LogError(ex, "An error occurred while fetching financial indicators. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request. Please try again later.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
         }
+
 
         private decimal CalculateRecurringAmount(Transaction transaction, DateTime startDate, DateTime endDate)
         {
