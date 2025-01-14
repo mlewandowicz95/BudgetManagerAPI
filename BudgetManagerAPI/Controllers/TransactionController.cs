@@ -1,4 +1,5 @@
-﻿using BudgetManagerAPI.Data;
+﻿using BudgetManagerAPI.Constants;
+using BudgetManagerAPI.Data;
 using BudgetManagerAPI.DTO;
 using BudgetManagerAPI.Enums;
 using BudgetManagerAPI.Models;
@@ -29,21 +30,40 @@ namespace BudgetManagerAPI.Controllers
         [Authorize]
         [HttpGet]
         public async Task<IActionResult> GetTransactions(
-    [FromQuery] TransactionType? type,      // Przychód/Wydatek
-    [FromQuery] int? categoryId,           // ID kategorii
-    [FromQuery] DateTime? startDate,       // Początek zakresu dat
-    [FromQuery] DateTime? endDate,         // Koniec zakresu dat
-    [FromQuery] string? description,       // Opis (częściowy)
-    [FromQuery] int page = 1,
-    [FromQuery] int pageSize = 10,
-    [FromQuery] string sortBy = "date",
-    [FromQuery] string sortOrder = "desc")        
+            [FromQuery] TransactionType? type, // Przychód/Wydatek
+            [FromQuery] int? categoryId, // ID kategorii
+            [FromQuery] DateTime? startDate, // Początek zakresu dat
+            [FromQuery] DateTime? endDate, // Koniec zakresu dat
+            [FromQuery] string? description, // Opis (częściowy)
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 10,
+            [FromQuery] string sortBy = "date",
+            [FromQuery] string sortOrder = "desc")
         {
             try
             {
-                _logger.LogInformation("Fetching transactions with filters");
+                var userId = GetParseUserId();
+                var userRole = User.FindFirst("http://schemas.microsoft.com/ws/2008/06/identity/claims/role")?.Value;
+                if (userId == 0)
+                {
+                    return Unauthorized(new ErrorResponseDto
+                    {
+                        Success = false,
+                        TraceId = HttpContext.TraceIdentifier,
+                        Message = "User is not authenticated.",
+                        ErrorCode = ErrorCodes.Unathorized
+                    });
+                }
+
+                _logger.LogInformation("Fetching transactions with filters for UserId: {UserId}", userId);
 
                 var query = _context.Transactions.AsQueryable();
+
+                
+                if (userRole != Roles.Admin)
+                {
+                    query = query.Where(t => t.UserId == userId);
+                } 
 
                 // Filtrowanie według typu transakcji
                 if (type.HasValue)
@@ -51,30 +71,28 @@ namespace BudgetManagerAPI.Controllers
                     query = query.Where(tran => tran.Type == type.Value);
                 }
 
-                // Filtrowanie według kategorii
                 if (categoryId.HasValue)
                 {
                     query = query.Where(tran => tran.CategoryId == categoryId.Value);
                 }
 
-                // Filtrowanie według zakresu dat
                 if (startDate.HasValue)
                 {
-                    query = query.Where(tran => tran.Date >= startDate.Value);
+                    query = query.Where(tran => tran.Date.Date >= startDate.Value.Date);
                 }
 
                 if (endDate.HasValue)
                 {
-                    query = query.Where(tran => tran.Date <= endDate.Value);
+                    var adjustedEndDate = endDate.Value.Date.AddDays(1).AddSeconds(-1);
+                    query = query.Where(tran => tran.Date <= adjustedEndDate);
                 }
 
-                // Filtrowanie według opisu
                 if (!string.IsNullOrEmpty(description))
                 {
                     query = query.Where(tran => tran.Description != null && tran.Description.Contains(description));
                 }
 
-                if(!string.IsNullOrEmpty(sortBy))
+                if (!string.IsNullOrEmpty(sortBy))
                 {
                     query = sortBy.ToLower() switch
                     {
@@ -86,7 +104,6 @@ namespace BudgetManagerAPI.Controllers
 
                 var totalItems = await query.CountAsync();
 
-                // Przekształcenie wyników do DTO
                 var transactions = await query
                     .Skip((page - 1) * pageSize)
                     .Take(pageSize)
@@ -109,29 +126,84 @@ namespace BudgetManagerAPI.Controllers
                     Items = transactions
                 };
 
-                _logger.LogInformation("Successfully fetched {Count} transactions with filters", transactions.Count());
-                return Ok(result);
+                _logger.LogInformation("Successfully fetched {Count} transactions for UserId: {UserId}", transactions.Count, userId);
+
+                // Zwrócenie sukcesu
+                return Ok(new SuccessResponseDto<PagedResult<TransactionDto>>
+                {
+                    Success = true,
+                    Message = "Transactions retrieved successfully.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data = result
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occurred while fetching transactions.");
-                return StatusCode(500, new { Message = "An error occurred while processing your request." });
+                _logger.LogError(ex, "An error occurred while fetching transactions. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request. Please try again later.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
         }
 
-        // GET: api/Transaction/5
+
         [HttpGet("{id}")]
-        public async Task<ActionResult<TransactionResponseDto>> GetTransaction(int id)
+        public async Task<IActionResult> GetTransaction(int id)
         {
             try
             {
-                var transaction = await _context.Transactions.FindAsync(id);
-                if (transaction == null)
+                var userId = GetParseUserId();
+                var userRole = User.FindFirst("http://schemas.microsoft.com/ws/2008/06/identity/claims/role")?.Value;
+
+                if (userId == 0)
                 {
-                    return NotFound(new { Message = $"Transaction with ID {id} not found" });
+                    return Unauthorized(new ErrorResponseDto
+                    {
+                        Success = false,
+                        TraceId = HttpContext.TraceIdentifier,
+                        Message = "User is not authenticated.",
+                        ErrorCode = ErrorCodes.Unathorized
+                    });
                 }
 
-                TransactionResponseDto transactionResponseDto = new TransactionResponseDto
+                if (string.IsNullOrEmpty(userRole))
+                {
+                    return Unauthorized(new ErrorResponseDto
+                    {
+                        Success = false,
+                        TraceId = HttpContext.TraceIdentifier,
+                        Message = "User role is not assigned or invalid.",
+                        ErrorCode = ErrorCodes.Unathorized
+                    });
+                }
+
+                _logger.LogInformation("Fetching transaction with ID {Id} for UserId {UserId} and Role {UserRole}", id, userId, userRole);
+
+                var transaction = await _context.Transactions
+                    .Where(t => userRole == Roles.Admin || t.UserId == userId)
+                    .FirstOrDefaultAsync(t => t.Id == id);
+
+                if (transaction == null)
+                {
+                    var exists = await _context.Transactions.AnyAsync(t => t.Id == id);
+                    var message = exists
+                        ? "You do not have permission to view this transaction."
+                        : $"Transaction with ID {id} not found.";
+
+                    return NotFound(new SuccessResponseDto<object>
+                    {
+                        Success = false,
+                        Message = message,
+                        TraceId = HttpContext.TraceIdentifier,
+                        Data = null
+                    });
+                }
+
+                var transactionResponseDto = new TransactionResponseDto
                 {
                     Id = transaction.Id,
                     UserId = transaction.UserId,
@@ -140,28 +212,101 @@ namespace BudgetManagerAPI.Controllers
                     Date = transaction.Date,
                     Description = transaction.Description,
                     IsRecurring = transaction.IsRecurring,
-                    Type = transaction.Type,
+                    Type = transaction.Type
                 };
 
-                return Ok(transactionResponseDto);
+                _logger.LogInformation("Transaction with ID {Id} successfully retrieved for UserId {UserId}", id, userId);
+
+                return Ok(new SuccessResponseDto<TransactionResponseDto>
+                {
+                    Data = transactionResponseDto,
+                    Success = true,
+                    Message = "Transaction retrieved successfully.",
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError($"Error in GetTransaction(int id): {ex.Message}");
-                return StatusCode(500, new { Message = "An error occured while processing your request." });
+                _logger.LogError(ex, "An error occurred while fetching the transaction. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request. Please try again later.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
         }
 
+
         // POST: api/Transaction
         [HttpPost]
-        public async Task<ActionResult<TransactionResponseDto>> PostTransaction([FromBody] TransactionRequestDto transactionRequestDto)
+        [Authorize]
+        public async Task<IActionResult> PostTransaction([FromBody] TransactionRequestDto transactionRequestDto)
         {
+            // Walidacja modelu
             if (!ModelState.IsValid)
             {
-                _logger.LogError("Model is not valid");
-                return BadRequest(ModelState);
+                var errors = ModelState
+    .Where(ms => ms.Value.Errors.Count > 0)
+    .ToDictionary(
+        kvp => kvp.Key,
+        kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray()
+    );
+
+
+                _logger.LogError("Invalid model state.");
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Invalid request data.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.ValidationError,
+                    Errors = errors
+                });
             }
 
+            // Pobranie informacji o zalogowanym użytkowniku
+            var userId = GetParseUserId();
+            var userRole = User.FindFirst("http://schemas.microsoft.com/ws/2008/06/identity/claims/role")?.Value;
+
+            if (userId == 0)
+            {
+                return Unauthorized(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "User is not authenticated.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.Unathorized
+                });
+            }
+
+            // Sprawdzenie uprawnień
+            if (userRole != Roles.Admin && transactionRequestDto.UserId != userId)
+            {
+                return new ObjectResult(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "You do not have permission to add a transaction for another user.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.Forbidden,
+                    Errors = new Dictionary<string, string[]>
+                    {
+                        { "Authorization", new[]
+                            {
+                                $"User with ID {userId} attempted to add a transaction for User with ID {transactionRequestDto.UserId}.",
+                                "Only Admins can add transactions for other users."
+                            }
+                        }
+                    }
+                })
+                {
+                    StatusCode = StatusCodes.Status403Forbidden
+                };
+
+            }
+
+            // Mapowanie danych z DTO
             var transaction = new Transaction
             {
                 UserId = transactionRequestDto.UserId,
@@ -176,18 +321,18 @@ namespace BudgetManagerAPI.Controllers
             _context.Transactions.Add(transaction);
             await _context.SaveChangesAsync();
 
-            // Check budget after save transaction
-            if(transaction.Type == TransactionType.Expense)
+            // Sprawdzanie budżetu po zapisaniu transakcji
+            if (transaction.Type == TransactionType.Expense)
             {
                 var monthlyBudget = await _context.MonthlyBudgets
                     .FirstOrDefaultAsync(b => b.UserId == transaction.UserId && b.CategoryId == transaction.CategoryId
-                    && b.Month == new DateTime(transaction.Date.Year, transaction.Date.Month, 1));
+                        && b.Month == new DateTime(transaction.Date.Year, transaction.Date.Month, 1));
 
-                if(monthlyBudget != null)
+                if (monthlyBudget != null)
                 {
                     var totalSpent = await _context.Transactions
                         .Where(t => t.UserId == transaction.UserId && t.CategoryId == transaction.CategoryId
-                        && t.Type == transaction.Type && t.Date.Year == transaction.Date.Year && t.Date.Month == transaction.Date.Month)
+                            && t.Type == transaction.Type && t.Date.Year == transaction.Date.Year && t.Date.Month == transaction.Date.Month)
                         .SumAsync(t => t.Amount);
 
                     // Ręczne załadowanie kategorii
@@ -195,47 +340,126 @@ namespace BudgetManagerAPI.Controllers
 
                     if (totalSpent > monthlyBudget.Amount)
                     {
-                        await _alertService.CreateAlert(transaction.UserId, $"Przekroczyłeś budżet dla kategorii {transaction.Category.Name} o {totalSpent - monthlyBudget.Amount:c}.");
+                        await _alertService.CreateAlert(transaction.UserId,
+                            $"Przekroczyłeś budżet dla kategorii {transaction.Category.Name} o {totalSpent - monthlyBudget.Amount:c}.");
                     }
-                    else if(monthlyBudget.Amount - totalSpent < 0.1m * monthlyBudget.Amount)
+                    else if (monthlyBudget.Amount - totalSpent < 0.1m * monthlyBudget.Amount)
                     {
-                        await _alertService.CreateAlert(transaction.UserId, $"Masz mniej niż 10% budżetu dla kategorii {transaction.Category.Name}.");
+                        await _alertService.CreateAlert(transaction.UserId,
+                            $"Masz mniej niż 10% budżetu dla kategorii {transaction.Category.Name}.");
                     }
                 }
             }
 
-
-            return CreatedAtAction("GetTransaction", new { id = transaction.Id }, new TransactionResponseDto
+            // Zwrócenie odpowiedzi z dodaną transakcją
+            return CreatedAtAction(nameof(GetTransaction), new { id = transaction.Id }, new SuccessResponseDto<TransactionResponseDto>
             {
-                Id = transaction.Id,
-                UserId = transaction.UserId,
-                CategoryId = transaction.CategoryId,
-                Amount = transaction.Amount,
-                Date = transaction.Date,
-                Description = transaction.Description,
-                IsRecurring = transaction.IsRecurring,
-                Type = transaction.Type
+                Success = true,
+                Message = "Transaction created successfully.",
+                TraceId = HttpContext.TraceIdentifier,
+                Data = new TransactionResponseDto
+                {
+                    Id = transaction.Id,
+                    UserId = transaction.UserId,
+                    CategoryId = transaction.CategoryId,
+                    Amount = transaction.Amount,
+                    Date = transaction.Date,
+                    Description = transaction.Description,
+                    IsRecurring = transaction.IsRecurring,
+                    Type = transaction.Type
+                }
             });
         }
 
 
-        //PUT: api/Transaction/5
+
+        // PUT: api/Transaction/5
         [HttpPut("{id}")]
+        [Authorize]
         public async Task<IActionResult> PutTransaction(int id, [FromBody] TransactionRequestDto dto)
         {
             if (id <= 0)
             {
-                _logger.LogError("Invalid ID");
-                return BadRequest(new { Message = "Invalid ID" });
+                _logger.LogError("Invalid ID: {Id}", id);
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Invalid ID provided.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.InvalidId,
+                    Errors = new Dictionary<string, string[]>
+            {
+                { "Id", new[] { "ID must be greater than 0." } }
+            }
+                });
+            }
+
+            var userId = GetParseUserId();
+            var userRole = User.FindFirst("http://schemas.microsoft.com/ws/2008/06/identity/claims/role")?.Value;
+
+            if (userId == 0)
+            {
+                return Unauthorized(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "User is not authenticated.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.Unathorized
+                });
             }
 
             var transaction = await _context.Transactions.FindAsync(id);
             if (transaction == null)
             {
-                return NotFound(new { Message = $"Transaction with ID {id} not found." });
+                return NotFound(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = $"Transaction with ID {id} not found.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.NotFound
+                });
             }
 
-            transaction.UserId = dto.UserId;
+            // Sprawdzenie uprawnień
+            if (userRole != Roles.Admin && transaction.UserId != userId)
+            {
+                return new ObjectResult(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "You do not have permission to edit this transaction.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.Forbidden,
+                    Errors = new Dictionary<string, string[]>
+            {
+                { "Authorization", new[] { "Editing another user's transaction is not allowed unless you are an Admin." } }
+            }
+                })
+                {
+                    StatusCode = StatusCodes.Status403Forbidden
+                };
+            }
+
+            // Sprawdzenie i ograniczenie zmiany UserId
+            if (userRole != Roles.Admin && dto.UserId != transaction.UserId)
+            {
+                return new ObjectResult(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "You do not have permission to change the owner of this transaction.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.Forbidden,
+                    Errors = new Dictionary<string, string[]>
+            {
+                { "UserId", new[] { "Only Admins can change the owner of a transaction." } }
+            }
+                })
+                {
+                    StatusCode = StatusCodes.Status403Forbidden
+                };
+            }
+
+            // Aktualizacja transakcji
+            transaction.UserId = dto.UserId; // Dopuszczalne tylko dla Admina
             transaction.CategoryId = dto.CategoryId;
             transaction.Amount = dto.Amount;
             transaction.Date = dto.Date;
@@ -246,45 +470,152 @@ namespace BudgetManagerAPI.Controllers
             try
             {
                 await _context.SaveChangesAsync();
-                _logger.LogInformation("Transaction with ID {id} updated successfully", id);
+                _logger.LogInformation("Transaction with ID {Id} updated successfully by UserId {UserId}", id, userId);
+
+                return Ok(new SuccessResponseDto<TransactionResponseDto>
+                {
+                    Success = true,
+                    Message = "Transaction updated successfully.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data = new TransactionResponseDto
+                    {
+                        Id = transaction.Id,
+                        UserId = transaction.UserId,
+                        CategoryId = transaction.CategoryId,
+                        Amount = transaction.Amount,
+                        Date = transaction.Date,
+                        Description = transaction.Description,
+                        IsRecurring = transaction.IsRecurring,
+                        Type = transaction.Type
+                    }
+                });
             }
-            catch (DbUpdateConcurrencyException)
+            catch (DbUpdateConcurrencyException ex)
             {
-                _logger.LogWarning("Concurrency conflict while updating transaction with ID {id}.", id);
-                return StatusCode(409, new { Message = "Concurrency conflict occured while updating the transaction." });
+                _logger.LogWarning(ex, "Concurrency conflict while updating transaction with ID {Id}.", id);
+                return new ObjectResult(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Concurrency conflict occurred while updating the transaction.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.Conflict,
+                    Errors = new Dictionary<string, string[]>
+            {
+                { "Concurrency", new[] { "Another process has modified this transaction. Please refresh and try again." } }
             }
-            return NoContent();
+                })
+                {
+                    StatusCode = StatusCodes.Status409Conflict
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An unexpected error occurred while updating transaction with ID {Id}.", id);
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An unexpected error occurred while processing your request.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.InternalServerError
+                });
+            }
         }
 
-        // DELETE: api/Category/5
+
+        // DELETE: api/Transaction/5
         [HttpDelete("{id}")]
+        [Authorize]
         public async Task<IActionResult> DeleteTransaction(int id)
         {
             if (id <= 0)
             {
-                return BadRequest(new { Message = "Invalid ID" });
+                _logger.LogError("Invalid ID: {Id}", id);
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Invalid ID provided.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.InvalidId,
+                    Errors = new Dictionary<string, string[]>
+            {
+                { "Id", new[] { "ID must be greater than 0." } }
+            }
+                });
+            }
+
+            var userId = GetParseUserId();
+            var userRole = User.FindFirst("http://schemas.microsoft.com/ws/2008/06/identity/claims/role")?.Value;
+
+            if (userId == 0)
+            {
+                return Unauthorized(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "User is not authenticated.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.Unathorized
+                });
             }
 
             var transaction = await _context.Transactions.FindAsync(id);
             if (transaction == null)
             {
                 _logger.LogWarning("Transaction with ID {Id} not found for deletion.", id);
-                return NotFound(new { Message = $"Transaction with ID {id} not found." });
+                return NotFound(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = $"Transaction with ID {id} not found.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.NotFound
+                });
             }
 
+            // Sprawdzenie uprawnień
+            if (userRole != Roles.Admin && transaction.UserId != userId)
+            {
+                return new ObjectResult(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "You do not have permission to delete this transaction.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.Forbidden,
+                    Errors = new Dictionary<string, string[]>
+            {
+                { "Authorization", new[] { "Deleting another user's transaction is not allowed unless you are an Admin." } }
+            }
+                })
+                {
+                    StatusCode = StatusCodes.Status403Forbidden
+                };
+            }
+
+            // Usunięcie transakcji
             _context.Transactions.Remove(transaction);
             try
             {
                 await _context.SaveChangesAsync();
-                _logger.LogInformation("Transaction with ID {Id} deleted successfully.", id);
+                _logger.LogInformation("Transaction with ID {Id} deleted successfully by UserId {UserId}", id, userId);
+
+                return Ok(new SuccessResponseDto<object>
+                {
+                    Success = true,
+                    Message = $"Transaction with ID {id} deleted successfully.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data = null
+                });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred while deleting transaction with ID {Id}.", id);
-                return StatusCode(500, new { Message = "An error occurred while processing your request." });
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An unexpected error occurred while processing your request.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.InternalServerError
+                });
             }
-
-            return NoContent();
         }
+
     }
 }

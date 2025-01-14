@@ -24,5 +24,9 @@
         // Autoryzacja
         public const string InvalidAuthorizationHeader = "INVALID_AUTHORIZATION_HEADER";
         public const string Unathorized = "UNATHORIZED";
+        public const string Forbidden = "FORBIDDEN";
+        public const string Conflict = "CONFILCT";
+        public const string NotFound = "NOT_FOUND";
+        public const string InvalidId = "INVALID_ID";
     }
 }

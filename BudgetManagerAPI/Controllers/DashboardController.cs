@@ -30,7 +30,7 @@ namespace BudgetManagerAPI.Controllers
         public async Task<IActionResult> GetDashboardSummary()
         {
             int parsedUsedId = GetParseUserId();
-            if(parsedUsedId == 0)
+            if (parsedUsedId == 0)
             {
                 return Unauthorized(new ErrorResponseDto
                 {
@@ -48,6 +48,7 @@ namespace BudgetManagerAPI.Controllers
 
 
                 var transactions = await _context.Transactions
+                    .Where(t => t.UserId == parsedUsedId)
                     .Include(t => t.Category)
                     .ToListAsync();
 
@@ -106,7 +107,7 @@ namespace BudgetManagerAPI.Controllers
                     TraceId = HttpContext.TraceIdentifier
                 });
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred while dowloading dashboard summary. TraceId: {TraceId}", HttpContext.TraceIdentifier);
                 return StatusCode(500, new ErrorResponseDto
@@ -154,11 +155,11 @@ namespace BudgetManagerAPI.Controllers
                 {
                     Success = true,
                     Message = "Data retrieved successfully.",
-                    TraceId= HttpContext.TraceIdentifier,
-                    Data = categoryExpenses 
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data = categoryExpenses
                 });
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred while dowloading expenses by category. TraceId: {TraceId}", HttpContext.TraceIdentifier);
                 return StatusCode(500, new ErrorResponseDto
@@ -192,19 +193,23 @@ namespace BudgetManagerAPI.Controllers
 
             try
             {
-                var monthlyData = await _context.Transactions
+                // Pobranie danych z bazy i przetwarzanie na poziomie klienta
+                var transactions = await _context.Transactions
                     .Where(t => t.UserId == parsedUserId)
+                    .ToListAsync();
+
+                var monthlyData = transactions
                     .GroupBy(t => new { t.Date.Year, t.Date.Month })
                     .Select(g => new
                     {
                         Year = g.Key.Year,
                         Month = g.Key.Month,
-                        Income = g.Sum(t => t.Type == TransactionType.Income ? t.Amount : 0),
-                        Expenses = g.Sum(t => t.Type == TransactionType.Expense ? t.Amount : 0)
+                        Income = g.Where(t => t.Type == TransactionType.Income).Sum(t => t.Amount),
+                        Expenses = g.Where(t => t.Type == TransactionType.Expense).Sum(t => t.Amount)
                     })
                     .OrderByDescending(m => new { m.Year, m.Month })
-                    .Take(12) 
-                    .ToListAsync();
+                    .Take(12)
+                    .ToList();
 
                 if (!monthlyData.Any())
                 {
@@ -244,6 +249,7 @@ namespace BudgetManagerAPI.Controllers
                 });
             }
         }
+
 
 
         [HttpGet("budget-forecast")]
@@ -398,7 +404,7 @@ namespace BudgetManagerAPI.Controllers
 
 
             decimal total = 0;
-            switch(transaction.Category.Name.ToLower())
+            switch (transaction.Category.Name.ToLower())
             {
                 case "daily":
                     total = transaction.Amount * (endDate - startDate).Days;
@@ -413,7 +419,9 @@ namespace BudgetManagerAPI.Controllers
                     break;
 
                 default:
-                    throw new InvalidOperationException("Unsupported recurring interval.");
+                    _logger.LogWarning($"Category {transaction.Category.Name} is not explicitly supported. Assuming monthly.");
+                    total = transaction.Amount;
+                    break;
 
             }
             return total;
