@@ -1,4 +1,6 @@
-﻿using BudgetManagerAPI.Data;
+﻿using BudgetManagerAPI.Constants;
+using BudgetManagerAPI.Data;
+using BudgetManagerAPI.DTO;
 using Microsoft.EntityFrameworkCore;
 
 namespace BudgetManagerAPI.Middleware
@@ -55,10 +57,28 @@ namespace BudgetManagerAPI.Middleware
                 if (isRevoked)
                 {
                     _logger.LogWarning("Revoked token detected: {Token}", token);
-                    context.Response.StatusCode = 401; // Unauthorized
-                    await context.Response.WriteAsync("Token has been revoked.");
+
+                    var errorResponse = new ErrorResponseDto
+                    {
+                        Success = false,
+                        Message = "Token has been revoked.",
+                        TraceId = context.TraceIdentifier,
+                        ErrorCode = ErrorCodes.Unathorized,
+                        Errors = new Dictionary<string, string[]>
+        {
+            { "Token", new[] { "The provided token is no longer valid." } }
+        }
+                    };
+
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized; // 401 Unauthorized
+                    context.Response.ContentType = "application/json";
+
+                    var jsonResponse = System.Text.Json.JsonSerializer.Serialize(errorResponse);
+                    await context.Response.WriteAsync(jsonResponse);
+
                     return;
                 }
+
 
                 // Kontynuuj przetwarzanie, jeśli token nie jest odwołany
                 await _next(context);

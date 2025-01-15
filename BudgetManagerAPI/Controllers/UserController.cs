@@ -1,6 +1,7 @@
 ﻿using BudgetManagerAPI.Constants;
 using BudgetManagerAPI.Data;
 using BudgetManagerAPI.DTO;
+using BudgetManagerAPI.Interfaces;
 using BudgetManagerAPI.Models;
 using BudgetManagerAPI.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -17,10 +18,10 @@ namespace BudgetManagerAPI.Controllers
     public class UserController : BaseController
     {
         private readonly AppDbContext _context;
-        private readonly EmailService _emailService;
+        private readonly IEmailService _emailService;
         private readonly ILogger<UserController> _logger;
 
-        public UserController(AppDbContext context, EmailService emailService, ILogger<UserController> logger)
+        public UserController(AppDbContext context, IEmailService emailService, ILogger<UserController> logger)
         {
             _context = context;
             _emailService = emailService;
@@ -41,34 +42,57 @@ namespace BudgetManagerAPI.Controllers
             if (userId == 0)
             {
                 _logger.LogWarning("Invalid user ID in GetUserProfile.");
-                return Unauthorized(new { Message = "Invalid UserId." });
+                return Unauthorized(new ErrorResponseDto
+                { 
+                    Success = false,
+                    Message = "Invalid UserId.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.Unathorized
+                });
             }
 
             try
             {
-                var user = await _context.Users
-            .Where(u => u.Id == userId)
-            .Select(u => new UserResponseDto
-            {
-                Id = u.Id,
-                Email = u.Email,
-                Role = u.Role
-            })
-            .FirstOrDefaultAsync();
+
+
+                var user = await _context.Users.FindAsync(userId);
+
 
                 if (user == null)
                 {
                     _logger.LogWarning("User with ID {UserId} not found.", userId);
-                    return NotFound(new { Message = "User not found." });
+                    return NotFound(new ErrorResponseDto 
+                    {
+                        Success = false,
+                        Message = "User not found.",
+                        TraceId = HttpContext.TraceIdentifier,
+                        ErrorCode = ErrorCodes.UserNotFound
+                    });
                 }
 
-                return Ok(user);
+                return Ok(new SuccessResponseDto<UserResponseDto>
+                {
+                    Success = true,
+                    Message = "Fetching logged user.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data = new UserResponseDto
+                    {
+                        Email = user.Email,
+                        Id = userId,
+                        Role = user.Role,
+                    }
+                });
             }
             catch (Exception ex)
             {
-
-                _logger.LogError("Error in GetUser(int id): {ex.Message}", ex.Message);
-                return StatusCode(500, new { Message = "An error occured while processing your request" });
+                _logger.LogError(ex, "An error occurred while fetching transactions. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request. Please try again later.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
         }
 
@@ -78,31 +102,89 @@ namespace BudgetManagerAPI.Controllers
         {
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+
+                var errors = ModelState
+    .Where(ms => ms.Value.Errors.Count > 0)
+    .ToDictionary(
+        kvp => kvp.Key,
+        kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray()
+    );
+
+                _logger.LogError("Model state is not valid. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Validation failed.",
+                    ErrorCode = ErrorCodes.ValidationError,
+                    Errors = errors,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId))
+            try
             {
-                return Unauthorized(new { Message = "User is not authorized." });
-            }
+                var userId = GetParseUserId();
+                if (userId <= 0)
+                {
+                    _logger.LogWarning("Invalid user ID in GetUserProfile.");
+                    return Unauthorized(new ErrorResponseDto
+                    {
+                        Success = false,
+                        Message = "Invalid UserId.",
+                        TraceId = HttpContext.TraceIdentifier,
+                        ErrorCode = ErrorCodes.Unathorized
+                    });
+                }
 
-            var user = await _context.Users.FindAsync(int.Parse(userId));
-            if (user == null)
+                var user = await _context.Users.FindAsync(userId);
+                if (user == null)
+                {
+                    _logger.LogWarning("User with ID {UserId} not found.", userId);
+                    return NotFound(new ErrorResponseDto
+                    {
+                        Success = false,
+                        Message = "User not found.",
+                        TraceId = HttpContext.TraceIdentifier,
+                        ErrorCode = ErrorCodes.UserNotFound
+                    });
+                }
+
+                var isPasswordValid = BCrypt.Net.BCrypt.Verify(changePasswordRequestDto.CurrentPassword, user.PasswordHash);
+                if (!isPasswordValid)
+                {
+                    return BadRequest(new ErrorResponseDto
+                    {
+                        Success = false,
+                        TraceId = HttpContext.TraceIdentifier,
+                        Message = "Current password is incorrect.",
+                        ErrorCode = ErrorCodes.InvalidCredentials
+                    });
+
+                }
+
+                user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(changePasswordRequestDto.NewPassword);
+                await _context.SaveChangesAsync();
+
+                return Ok(new SuccessResponseDto<object>
+                {
+                    Success = true,
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data = null,
+                    Message = "Password has been changed successfully."
+                });
+            }
+            catch (Exception ex)
             {
-                return NotFound(new { Message = "User not found." });
+                _logger.LogError(ex, "An error occurred while ChangePassword. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request. Please try again later.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
-            var isPasswordValid = BCrypt.Net.BCrypt.Verify(changePasswordRequestDto.CurrentPassword, user.PasswordHash);
-            if (!isPasswordValid)
-            {
-                return BadRequest(new { Message = "Current password is incorrect." });
-            }
-
-            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(changePasswordRequestDto.NewPassword);
-            await _context.SaveChangesAsync();
-
-            return Ok(new { Message = "Password has been changed successfully." });
 
         }
 
@@ -110,29 +192,43 @@ namespace BudgetManagerAPI.Controllers
         public async Task<IActionResult> RequestEmailChange([FromBody] UpdateEmailDto dto)
         {
             var userId = GetParseUserId();
-
-
-            if (userId == 0)
+            if (userId <= 0)
             {
-                _logger.LogWarning("Invalid user ID in RequestEmailChange.");
-                return Unauthorized(new { Message = "Invalid UserId." });
+                _logger.LogWarning("Invalid user ID in GetUserProfile.");
+                return Unauthorized(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Invalid UserId.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.Unathorized
+                });
             }
-
 
             var emailExistsInDb = await _context.Users.FirstOrDefaultAsync(e => e.Email == dto.NewEmail);
             if(emailExistsInDb != null)
             {
-                return BadRequest(new { Message = "Email is already exists in database." });
+                return BadRequest(new ErrorResponseDto
+                { 
+                    Success = false,
+                    TraceId= HttpContext.TraceIdentifier,
+                    Message = "Email is already exists in database.",
+                    ErrorCode = ErrorCodes.Conflict
+                });
             }
 
 
             var user = await _context.Users.FindAsync(userId);
             if (user == null)
             {
-                return NotFound(new { Message = "User not found." });
+                _logger.LogWarning("User with ID {UserId} not found.", userId);
+                return NotFound(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "User not found.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.UserNotFound
+                });
             }
-
-            
 
             try
             {
@@ -154,15 +250,26 @@ namespace BudgetManagerAPI.Controllers
                 await _emailService.SendEmailAsync(dto.NewEmail, "Confirm Email Change",
                      $"Click the link to confirm your email change: {confirmationLink}");
 
-                return Ok(new { Message = "Confirmation email sent." });
+                return Ok(new SuccessResponseDto<string>
+                {
+                    Success = true,
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data = dto.NewEmail,
+                    Message = "Confirmation email sent."
+                });
+
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
-
-                _logger.LogError("Error in RequestEmailChange(UpdateEmailDto dto): {ex.Message}", ex.Message);
-                return StatusCode(500, new { Message = "An error occured while processing your request" });
+                _logger.LogError(ex, "An error occurred while RequestEmailChange TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request. Please try again later.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
-
         }
 
         [HttpGet("profile/email/confirm")]
@@ -172,7 +279,13 @@ namespace BudgetManagerAPI.Controllers
 
             if (user == null || user.EmailChangeTokenExpiry < DateTime.UtcNow)
             {
-                return BadRequest(new { Message = "Invalid or expired token." });
+                return BadRequest(new ErrorResponseDto
+                { 
+                    Success = false,
+                    Message = "Invalid or expired token.",
+                    ErrorCode = ErrorCodes.InvalidToken,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
             try
@@ -185,13 +298,25 @@ namespace BudgetManagerAPI.Controllers
 
                 await _context.SaveChangesAsync();
 
-                return Ok(new { Message = "Email address updated successfully." });
+                return Ok(new SuccessResponseDto<object>
+                { 
+                    Success = true,
+                    Message = "Email address updated successfully.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data = null
+                });
             }
             catch (Exception ex)
             {
 
-                _logger.LogError("Error in ConfirmEmailChange(string token): {ex.Message}", ex.Message);
-                return StatusCode(500, new { Message = "An error occured while processing your request" });
+                _logger.LogError(ex, "An error occurred while ConfirmEmailChange TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request. Please try again later.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
         }
