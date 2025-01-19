@@ -207,6 +207,7 @@ namespace BudgetManagerAPI.Controllers
                     Id = transaction.Id,
                     UserId = transaction.UserId,
                     CategoryId = transaction.CategoryId,
+                    GoalId = transaction.GoalId,
                     Amount = transaction.Amount,
                     Date = transaction.Date,
                     Description = transaction.Description,
@@ -305,6 +306,19 @@ namespace BudgetManagerAPI.Controllers
 
             }
 
+            // Walidacja typu transakcji
+            if (transactionRequestDto.Type != TransactionType.Expense && transactionRequestDto.GoalId.HasValue)
+            {
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Only expense transactions can be linked to a goal.",
+                    ErrorCode = ErrorCodes.InvalidData,
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
+
+
             // Mapowanie danych z DTO
             var transaction = new Transaction
             {
@@ -314,13 +328,33 @@ namespace BudgetManagerAPI.Controllers
                 Date = transactionRequestDto.Date,
                 Description = transactionRequestDto.Description,
                 IsRecurring = transactionRequestDto.IsRecurring,
-                Type = transactionRequestDto.Type
+                Type = transactionRequestDto.Type,
+                GoalId = transactionRequestDto.GoalId,
             };
 
             _context.Transactions.Add(transaction);
+
+            if(transaction.GoalId.HasValue )
+            {
+                var goal = await _context.Goals.FindAsync(transaction.GoalId);
+                if(goal != null && goal.UserId == userId)
+                {
+                    goal.CurrentProgress += transaction.Amount;
+
+
+                    if(goal.CurrentProgress >= goal.TargetAmount)
+                    {
+                        goal.CurrentProgress = goal.TargetAmount;
+
+                        await _alertService.CreateAlert(goal.UserId,
+    $"Congratulations! You have completed the goal '{goal.Name}'.");
+                    }
+                }
+            }
+
             await _context.SaveChangesAsync();
 
-            // Sprawdzanie budżetu po zapisaniu transakcji
+
             if (transaction.Type == TransactionType.Expense)
             {
                 var monthlyBudget = await _context.MonthlyBudgets
@@ -334,24 +368,23 @@ namespace BudgetManagerAPI.Controllers
                             && t.Type == transaction.Type && t.Date.Year == transaction.Date.Year && t.Date.Month == transaction.Date.Month)
                         .SumAsync(t => t.Amount);
 
-                    // Ręczne załadowanie kategorii
                     await _context.Entry(transaction).Reference(t => t.Category).LoadAsync();
 
                     if (totalSpent > monthlyBudget.Amount)
                     {
                         await _alertService.CreateAlert(transaction.UserId,
-                            $"Przekroczyłeś budżet dla kategorii {transaction.Category.Name} o {totalSpent - monthlyBudget.Amount:c}.");
+                            $"You cross budget to category {transaction.Category.Name} o {totalSpent - monthlyBudget.Amount:c}.");
                     }
                     else if (monthlyBudget.Amount - totalSpent < 0.1m * monthlyBudget.Amount)
                     {
                         await _alertService.CreateAlert(transaction.UserId,
-                            $"Masz mniej niż 10% budżetu dla kategorii {transaction.Category.Name}.");
+                            $"You have less than 10% budget to category {transaction.Category.Name}.");
                     }
                 }
             }
 
             // Zwrócenie odpowiedzi z dodaną transakcją
-            return CreatedAtAction(nameof(GetTransaction), new { id = transaction.Id }, new SuccessResponseDto<TransactionResponseDto>
+            return Ok(new SuccessResponseDto<TransactionResponseDto>
             {
                 Success = true,
                 Message = "Transaction created successfully.",
@@ -365,7 +398,8 @@ namespace BudgetManagerAPI.Controllers
                     Date = transaction.Date,
                     Description = transaction.Description,
                     IsRecurring = transaction.IsRecurring,
-                    Type = transaction.Type
+                    Type = transaction.Type,
+                    GoalId = transaction.GoalId,
                 }
             });
         }
