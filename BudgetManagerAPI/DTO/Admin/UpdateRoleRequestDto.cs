@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace BudgetManagerAPI.DTO.Admin
 {
-    public class UpdateRoleDto
+    public class UpdateRoleRequestDto
     {
         [Required]
         [RoleValidation]

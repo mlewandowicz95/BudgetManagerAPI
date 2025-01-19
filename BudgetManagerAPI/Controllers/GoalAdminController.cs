@@ -23,61 +23,107 @@ namespace BudgetManagerAPI.Controllers
 
 
         [HttpGet]
+        [Authorize(Roles = Roles.Admin)]
         public async Task<IActionResult> GetAllGoals()
         {
             try
             {
-                _logger.LogInformation("Fetching all goals.");
+                _logger.LogInformation("Fetching all goals. TraceId: {TraceId}", HttpContext.TraceIdentifier);
 
                 var goals = await _context.Goals
-                     .Select(goal => new GoalResponseDto
-                     {
-                         Id = goal.Id,
-                         UserId = goal.UserId,
-                         CreatedAt = goal.CreatedAt,
-                         TargetAmount = goal.TargetAmount,
-                         DueDate = goal.DueDate,
-                         Name = goal.Name,
-                         CurrentProgress = goal.CurrentProgress,
-                     }).ToListAsync();
-                _logger.LogInformation("Successfully fetched {Count} goals.", goals.Count());
+                    .Select(goal => new GoalResponseDto
+                    {
+                        Id = goal.Id,
+                        UserId = goal.UserId,
+                        CreatedAt = goal.CreatedAt,
+                        TargetAmount = goal.TargetAmount,
+                        DueDate = goal.DueDate,
+                        Name = goal.Name,
+                        CurrentProgress = goal.CurrentProgress,
+                    })
+                    .ToListAsync();
 
-                return Ok(goals);
+                _logger.LogInformation("Successfully fetched {Count} goals. TraceId: {TraceId}", goals.Count, HttpContext.TraceIdentifier);
+
+                return Ok(new SuccessResponseDto<List<GoalResponseDto>>
+                {
+                    Success = true,
+                    Message = $"Successfully fetched {goals.Count} goals.",
+                    Data = goals,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occured while fetching goals.");
-                return StatusCode(500, new { Message = "An error occured while processing your request." });
+                _logger.LogError(ex, "An error occurred while fetching goals. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
         }
 
+
         [HttpDelete("{id}")]
+        [Authorize(Roles = Roles.Admin)]
         public async Task<IActionResult> RemoveGoal(int id)
         {
             if (id <= 0)
             {
-                return BadRequest(new { Message = "Invalid ID" });
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Invalid goal ID.",
+                    ErrorCode = ErrorCodes.InvalidId,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
             var goal = await _context.Goals.FindAsync(id);
             if (goal == null)
             {
-                return NotFound(new { Message = "Goal with ID {id} not found.", id });
+                _logger.LogWarning("Goal with ID {Id} not found for deletion. TraceId: {TraceId}", id, HttpContext.TraceIdentifier);
+                return NotFound(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = $"Goal with ID {id} not found.",
+                    ErrorCode = ErrorCodes.NotFound,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
-
-            _context.Goals.Remove(goal);
 
             try
             {
+                _context.Goals.Remove(goal);
                 await _context.SaveChangesAsync();
-                _logger.LogInformation("Goal with ID {id} deleted successfully.", id);
+
+                _logger.LogInformation("Goal with ID {Id} deleted successfully. TraceId: {TraceId}", id, HttpContext.TraceIdentifier);
+
+                return Ok(new SuccessResponseDto<object>
+                {
+                    Success = true,
+                    Message = $"Goal with ID {id} has been deleted successfully.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data = null
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occurred while deleting goal with ID {Id}.", id);
-                return StatusCode(500, new { Message = "An error occurred while processing your request." });
+                _logger.LogError(ex, "An error occurred while deleting goal with ID {Id}. TraceId: {TraceId}", id, HttpContext.TraceIdentifier);
+
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
-            return NoContent();
         }
+
     }
 }

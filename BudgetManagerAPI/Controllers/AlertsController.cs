@@ -1,4 +1,6 @@
-﻿using BudgetManagerAPI.Services;
+﻿using BudgetManagerAPI.Constants;
+using BudgetManagerAPI.DTO;
+using BudgetManagerAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -24,51 +26,117 @@ namespace BudgetManagerAPI.Controllers
         public async Task<IActionResult> GetUserAlerts([FromQuery] bool onlyUnread = false)
         {
             var userId = GetParseUserId();
-            if(userId == 0)
-                return Unauthorized(new {Message = "Error UserId"});
+            if (userId == 0)
+            {
+                return Unauthorized(new ErrorResponseDto
+                {
+                    Success = false,
+                    TraceId = HttpContext.TraceIdentifier,
+                    Message = "User is not authenticated.",
+                    ErrorCode = ErrorCodes.Unathorized
+                });
+            }
 
             try
             {
+                // Pobranie alertów dla użytkownika
                 var alerts = await _alertService.GetUserAlerts(userId, onlyUnread);
 
-                return Ok(alerts);
+                // Mapowanie na AlertResponseDto
+                var alertDtos = alerts.Select(alert => new AlertResponseDto
+                {
+                    Id = alert.Id,
+                    Message = alert.Message,
+                    CreatedAt = alert.CreatedAt,
+                    IsRead = alert.IsRead
+                }).ToList();
+
+                return Ok(new SuccessResponseDto<IEnumerable<AlertResponseDto>>
+                {
+                    Success = true,
+                    Message = "User alerts fetched successfully.",
+                    Data = alertDtos,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occured while GetAlerts.");
-                return StatusCode(50, new { Message = "Error occured while processing your request." });
+                _logger.LogError(ex, "An error occurred while fetching alerts. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
         }
+
 
         [HttpPost("mark-as-read")]
         public async Task<IActionResult> MarkAsRead([FromBody] List<int> alertIds)
         {
-
             if (alertIds == null || !alertIds.Any())
             {
-                return BadRequest(new { Message = "Alert IDs cannot be empty." });
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Alert IDs cannot be empty.",
+                    ErrorCode = ErrorCodes.InvalidData,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
             try
             {
                 var userId = GetParseUserId();
                 if (userId == 0)
-                    return Unauthorized(new { Message = "Error UserId" });
-
-                var markedCount = await _alertService.MarkAsReadAsync(userId, alertIds);
-
-                if(markedCount == 0)
                 {
-                    return NotFound(new { Message = "No alerts found to mark as read." });
+                    return Unauthorized(new ErrorResponseDto
+                    {
+                        Success = false,
+                        Message = "User is not authenticated.",
+                        ErrorCode = ErrorCodes.Unathorized,
+                        TraceId = HttpContext.TraceIdentifier
+                    });
                 }
 
-                return Ok(new { Message = $"{markedCount} alert(s) marked as read." });
+                // Oznaczenie alertów jako przeczytane
+                var markedCount = await _alertService.MarkAsReadAsync(userId, alertIds);
+
+                if (markedCount == 0)
+                {
+                    return NotFound(new ErrorResponseDto
+                    {
+                        Success = false,
+                        Message = "No alerts found to mark as read.",
+                        ErrorCode = ErrorCodes.NotFound,
+                        TraceId = HttpContext.TraceIdentifier
+                    });
+                }
+
+                return Ok(new SuccessResponseDto<int>
+                {
+                    Success = true,
+                    Message = $"{markedCount} alert(s) marked as read.",
+                    Data = markedCount,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occured while marking alerts as read.");
-                return StatusCode(500, new { Message = "An error occured while processing your request." });
+                _logger.LogError(ex, "An error occurred while marking alerts as read. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
         }
+
     }
 }

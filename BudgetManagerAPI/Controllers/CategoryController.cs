@@ -25,7 +25,6 @@ namespace BudgetManagerAPI.Controllers
             _logger = logger;
         }
 
-        // GET: api/Category
         [HttpGet]
         [Authorize]
         public async Task<IActionResult> GetCategories()
@@ -33,12 +32,22 @@ namespace BudgetManagerAPI.Controllers
             try
             {
                 var userId = GetParseUserId();
+                if (userId == 0)
+                {
+                    return Unauthorized(new ErrorResponseDto
+                    {
+                        Success = false,
+                        Message = "User is not authenticated.",
+                        ErrorCode = ErrorCodes.Unathorized,
+                        TraceId = HttpContext.TraceIdentifier
+                    });
+                }
 
                 IQueryable<Category> query = _context.Categories;
 
                 if (!User.IsInRole(Roles.Admin))
                 {
-                    // Ograniczenie widoczności dla Pro i User
+                    // Ograniczenie widoczności dla ról innych niż Admin
                     query = query.Where(c => c.UserId == null || c.UserId == userId);
                 }
 
@@ -51,79 +60,185 @@ namespace BudgetManagerAPI.Controllers
                     })
                     .ToListAsync();
 
-                _logger.LogInformation("Successfully fetched {Count} categories.", categories.Count);
+                _logger.LogInformation("Successfully fetched {Count} categories for user {UserId}. TraceId: {TraceId}", categories.Count, userId, HttpContext.TraceIdentifier);
 
-                return Ok(categories);
+                return Ok(new SuccessResponseDto<List<CategoryResponseDto>>
+                {
+                    Success = true,
+                    Message = $"Successfully fetched {categories.Count} categories.",
+                    Data = categories,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occurred while fetching categories.");
-                return StatusCode(500, new { Message = "An error occurred while processing your request." });
+                _logger.LogError(ex, "An error occurred while fetching categories. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
         }
 
 
-        // GET: api/Category/2
+
         [HttpGet("{id}")]
         [Authorize]
         public async Task<IActionResult> GetCategory(int id)
         {
             try
             {
+                if (id <= 0)
+                {
+                    return BadRequest(new ErrorResponseDto
+                    {
+                        Success = false,
+                        Message = "Invalid category ID.",
+                        ErrorCode = ErrorCodes.InvalidId,
+                        TraceId = HttpContext.TraceIdentifier
+                    });
+                }
+
                 var category = await _context.Categories.FindAsync(id);
                 if (category == null)
                 {
-                    return NotFound(new { Message = $"Category with ID {id} not found." });
+                    _logger.LogWarning("Category with ID {Id} not found. TraceId: {TraceId}", id, HttpContext.TraceIdentifier);
+                    return NotFound(new ErrorResponseDto
+                    {
+                        Success = false,
+                        Message = $"Category with ID {id} not found.",
+                        ErrorCode = ErrorCodes.NotFound,
+                        TraceId = HttpContext.TraceIdentifier
+                    });
                 }
 
-                if(!User.IsInRole(Roles.Admin) && category.UserId == null)
+                var userId = GetParseUserId();
+                if (userId == 0)
                 {
-                    return Forbid("Only admin can see not mine category.");
+                    return Unauthorized(new ErrorResponseDto
+                    {
+                        Success = false,
+                        Message = "User is not authenticated.",
+                        ErrorCode = ErrorCodes.Unathorized,
+                        TraceId = HttpContext.TraceIdentifier
+                    });
                 }
 
-                CategoryResponseDto categoryResponseDto = new CategoryResponseDto
+                if (!User.IsInRole(Roles.Admin) && category.UserId == null)
+                {
+                    _logger.LogWarning("Access denied for user {UserId} to category {CategoryId}. TraceId: {TraceId}", userId, id, HttpContext.TraceIdentifier);
+                    return new ObjectResult(new ErrorResponseDto
+                    {
+                        Success = false,
+                        Message = "You do not have permission to access this category.",
+                        TraceId = HttpContext.TraceIdentifier,
+                        ErrorCode = ErrorCodes.Forbidden,
+                        Errors = new Dictionary<string, string[]>
+        {
+            { "Authorization", new[]
+                {
+                    $"User with ID {userId} attempted to access a global category with ID {id}.",
+                    "Only Admins can access global categories."
+                }
+            }
+        }
+                    })
+                    {
+                        StatusCode = StatusCodes.Status403Forbidden
+                    };
+                }
+
+
+                var categoryResponseDto = new CategoryResponseDto
                 {
                     Id = category.Id,
                     Name = category.Name,
                     UserId = category.UserId
                 };
 
-                return Ok(categoryResponseDto);
+                _logger.LogInformation("Category with ID {Id} fetched successfully. TraceId: {TraceId}", id, HttpContext.TraceIdentifier);
+
+                return Ok(new SuccessResponseDto<CategoryResponseDto>
+                {
+                    Success = true,
+                    Message = $"Category with ID {id} fetched successfully.",
+                    Data = categoryResponseDto,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "An error occurred while fetching category with ID {Id}. TraceId: {TraceId}", id, HttpContext.TraceIdentifier);
 
-                _logger.LogError($"Error in GetCatergory(int id): {ex.Message}");
-
-                return StatusCode(500, "An error occured while processing your request.");
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
         }
+
 
 
         // POST: api/Category
         [Authorize(Roles = $"{Roles.Admin},{Roles.Pro}")]
         [HttpPost]
-        public async Task<ActionResult<Category>> PostCategory([FromBody] CategoryRequestDto categoryRequestDto)
+        public async Task<IActionResult> PostCategory([FromBody] CategoryRequestDto categoryRequestDto)
         {
             var userId = GetParseUserId();
             if (userId == 0)
             {
-                return Unauthorized(new { Message = "Error user id." });
+                return Unauthorized(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "User is not authenticated.",
+                    ErrorCode = ErrorCodes.Unathorized,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
-
-
 
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Invalid request data.",
+                    ErrorCode = ErrorCodes.Unathorized,
+                    TraceId = HttpContext.TraceIdentifier,
+                    Errors = ModelState.ToDictionary(
+                        key => key.Key,
+                        value => value.Value.Errors.Select(e => e.ErrorMessage).ToArray()
+                    )
+                });
             }
 
-            if(User.IsInRole(Roles.Pro) && categoryRequestDto.UserId != categoryRequestDto.UserId)
+            // Pro użytkownicy mogą tworzyć kategorie tylko dla siebie
+            if (User.IsInRole(Roles.Pro) && categoryRequestDto.UserId != userId)
             {
-                return Forbid("Pro users can only create categories for themselves.");
+                return new ObjectResult(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Pro users can only create categories for themselves.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.Forbidden,
+                    Errors = new Dictionary<string, string[]>
+            {
+                { "Authorization", new[] { $"User with ID {userId} attempted to create a category for another user with ID {categoryRequestDto.UserId}." } }
+            }
+                })
+                {
+                    StatusCode = StatusCodes.Status403Forbidden
+                };
             }
 
-            if(User.IsInRole(Roles.Admin) && categoryRequestDto.UserId == null)
+            // Tworzenie kategorii globalnej przez admina
+            if (User.IsInRole(Roles.Admin) && categoryRequestDto.UserId == null)
             {
                 var globalCategory = new Category
                 {
@@ -131,33 +246,81 @@ namespace BudgetManagerAPI.Controllers
                     UserId = null,
                 };
 
-                _context.Categories.Add(globalCategory);
-                await _context.SaveChangesAsync();
-                return CreatedAtAction("GetCategory", new { id = globalCategory.Id }, new CategoryResponseDto
+                try
                 {
-                    Id = globalCategory.Id,
-                    Name = globalCategory.Name,
-                    UserId = globalCategory.UserId,
-                });
+                    _context.Categories.Add(globalCategory);
+                    await _context.SaveChangesAsync();
+
+                    _logger.LogInformation("Admin user {UserId} created global category {CategoryId}. TraceId: {TraceId}", userId, globalCategory.Id, HttpContext.TraceIdentifier);
+
+                    return CreatedAtAction("GetCategory", new { id = globalCategory.Id }, new SuccessResponseDto<CategoryResponseDto>
+                    {
+                        Success = true,
+                        Message = "Global category created successfully.",
+                        Data = new CategoryResponseDto
+                        {
+                            Id = globalCategory.Id,
+                            Name = globalCategory.Name,
+                            UserId = globalCategory.UserId
+                        },
+                        TraceId = HttpContext.TraceIdentifier
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "An error occurred while creating a global category. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+
+                    return StatusCode(500, new ErrorResponseDto
+                    {
+                        Success = false,
+                        Message = "An error occurred while processing your request.",
+                        ErrorCode = ErrorCodes.InternalServerError,
+                        TraceId = HttpContext.TraceIdentifier
+                    });
+                }
             }
 
-
+            // Tworzenie kategorii użytkownika
             var category = new Category
             {
                 Name = categoryRequestDto.Name,
                 UserId = categoryRequestDto.UserId
             };
 
-            _context.Categories.Add(category);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction("GetCategory", new { id = category.Id }, new CategoryResponseDto
+            try
             {
-                Id = category.Id,
-                Name = category.Name,
-                UserId = category.UserId
-            });
+                _context.Categories.Add(category);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("User {UserId} created category {CategoryId}. TraceId: {TraceId}", userId, category.Id, HttpContext.TraceIdentifier);
+
+                return CreatedAtAction("GetCategory", new { id = category.Id }, new SuccessResponseDto<CategoryResponseDto>
+                {
+                    Success = true,
+                    Message = "Category created successfully.",
+                    Data = new CategoryResponseDto
+                    {
+                        Id = category.Id,
+                        Name = category.Name,
+                        UserId = category.UserId
+                    },
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while creating a category. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
         }
+
 
 
         // PUT: api/Category/2
@@ -165,42 +328,117 @@ namespace BudgetManagerAPI.Controllers
         [Authorize(Roles = $"{Roles.Admin},{Roles.Pro}")]
         public async Task<IActionResult> PutCategory(int id, [FromBody] CategoryRequestDto dto)
         {
+            if (id <= 0)
+            {
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Invalid category ID.",
+                    ErrorCode = ErrorCodes.InvalidId,
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
+
             var userId = GetParseUserId();
+            if (userId == 0)
+            {
+                return Unauthorized(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "User is not authenticated.",
+                    ErrorCode = ErrorCodes.Unathorized,
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
 
             var category = await _context.Categories.FindAsync(id);
             if (category == null)
             {
-                return NotFound(new { Message = $"Category with ID {id} not found." });
+                _logger.LogWarning("Category with ID {Id} not found. TraceId: {TraceId}", id, HttpContext.TraceIdentifier);
+                return NotFound(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = $"Category with ID {id} not found.",
+                    ErrorCode = ErrorCodes.NotFound,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
-
-            if(User.IsInRole(Roles.Admin))
+            if (User.IsInRole(Roles.Admin))
             {
+                // Admin może edytować wszystkie kategorie
                 category.Name = dto.Name;
                 category.UserId = dto.UserId;
             }
-            else if(category.UserId == userId)
+            else if (category.UserId == userId)
             {
+                // Użytkownicy Pro mogą edytować tylko własne kategorie
                 category.Name = dto.Name;
             }
             else
             {
-                return Forbid("You can only edit your own categories.");
+                _logger.LogWarning("User {UserId} attempted to edit category {CategoryId} without permission. TraceId: {TraceId}", userId, id, HttpContext.TraceIdentifier);
+                return new ObjectResult(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "You can only edit your own categories.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.Forbidden,
+                    Errors = new Dictionary<string, string[]>
+            {
+                { "Authorization", new[] { $"User with ID {userId} attempted to edit category with ID {id}." } }
+            }
+                })
+                {
+                    StatusCode = StatusCodes.Status403Forbidden
+                };
             }
 
             try
             {
                 await _context.SaveChangesAsync();
-                _logger.LogInformation("Category with ID {Id} updated successfully.", id);
+
+                _logger.LogInformation("Category with ID {Id} updated successfully. TraceId: {TraceId}", id, HttpContext.TraceIdentifier);
+
+                return Ok(new SuccessResponseDto<CategoryResponseDto>
+                {
+                    Success = true,
+                    Message = $"Category with ID {id} updated successfully.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data = new CategoryResponseDto
+                    {
+                        Id = category.Id,
+                        Name = category.Name,
+                        UserId = category.UserId,
+                    }
+                });
             }
             catch (DbUpdateConcurrencyException)
             {
-                _logger.LogWarning("Concurrency conflict while updating category with ID {Id}.", id);
-                return StatusCode(409, new { Message = "Concurrency conflict occurred while updating the category." });
-            }
+                _logger.LogWarning("Concurrency conflict while updating category with ID {Id}. TraceId: {TraceId}", id, HttpContext.TraceIdentifier);
 
-            return NoContent();
+                return Conflict(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Concurrency conflict occurred while updating the category.",
+                    ErrorCode = ErrorCodes.Conflict,
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while updating category with ID {Id}. TraceId: {TraceId}", id, HttpContext.TraceIdentifier);
+
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
         }
+
 
 
 

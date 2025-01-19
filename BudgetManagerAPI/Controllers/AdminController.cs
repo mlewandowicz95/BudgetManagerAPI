@@ -24,7 +24,6 @@ namespace BudgetManagerAPI.Controllers
             _context = context;
             _logger = logger;
         }
-
         [HttpGet("users")]
         public async Task<IActionResult> GetAllUsers(
             [FromQuery] bool? isActive,
@@ -34,78 +33,60 @@ namespace BudgetManagerAPI.Controllers
             [FromQuery] string sortBy = "email",
             [FromQuery] string sortOrder = "asc")
         {
-            // Weryfikacja UserId
             var userId = GetParseUserId();
             if (userId == 0)
             {
-                _logger.LogError("Błąd w UserId.");
-                return Unauthorized(new { Message = "Błąd w UserId." });
+                _logger.LogError("Invalid UserId. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return Unauthorized(new ErrorResponseDto
+                {
+                    Message = "Invalid UserId.",
+                    Success = false,
+                    TraceId = HttpContext.TraceIdentifier,
+                    ErrorCode = ErrorCodes.Unathorized
+                });
             }
-
 
             try
             {
-                _logger.LogInformation("Rozpoczęcie pobierania użytkowników. Parametry: isActive={isActive}, roles={roles}, page={page}, pageSize={pageSize}, sortBy={sortBy}, sortOrder={sortOrder}",
+                _logger.LogInformation("Fetching users with parameters: isActive={isActive}, roles={roles}, page={page}, pageSize={pageSize}, sortBy={sortBy}, sortOrder={sortOrder}",
                     isActive, roles, page, pageSize, sortBy, sortOrder);
 
-                // Rozpoczęcie budowy zapytania
                 var query = _context.Users.AsQueryable();
-                _logger.LogInformation("Początkowe zapytanie: {query}", query.ToQueryString());
 
-                // Filtrowanie po aktywności użytkowników
+                // Filter by active status
                 if (isActive.HasValue)
                 {
-                    query = isActive.Value
-                        ? query.Where(u => u.IsActive)
-                        : query.Where(u => !u.IsActive);
-                    _logger.LogInformation("Zapytanie po filtrze isActive={isActive}: {query}", isActive, query.ToQueryString());
+                    query = query.Where(u => u.IsActive == isActive.Value);
                 }
 
-                // Filtrowanie po rolach
-                if (roles != null && roles.Any())
+                // Filter by roles
+                if (roles?.Any() == true)
                 {
-                    var filteredRoles = roles.Where(role => Roles.All.Contains(role)).ToHashSet();
-
-                    if (filteredRoles.Any())
+                    var validRoles = roles.Where(role => Roles.All.Contains(role)).ToHashSet();
+                    if (validRoles.Any())
                     {
-                        query = query.Where(u => filteredRoles.Contains(u.Role));
-                        _logger.LogInformation("Zapytanie po filtrze ról={roles}: {query}", roles, query.ToQueryString());
+                        query = query.Where(u => validRoles.Contains(u.Role));
                     }
                     else
                     {
-                        _logger.LogWarning("Żadne z przesłanych ról nie pasuje do dozwolonych: {roles}", string.Join(", ", roles));
+                        _logger.LogWarning("None of the provided roles match the allowed roles.");
                     }
                 }
 
-                // Sortowanie wyników
-                if (!string.IsNullOrEmpty(sortBy))
+                // Sorting
+                query = sortBy.ToLower() switch
                 {
-                    query = sortBy.ToLower() switch
-                    {
-                        "role" => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase)
-                            ? query.OrderBy(u => u.Role)
-                            : query.OrderByDescending(u => u.Role),
-                        "isactive" => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase)
-                            ? query.OrderBy(u => u.IsActive)
-                            : query.OrderByDescending(u => u.IsActive),
-                        "createdat" => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase)
-                            ? query.OrderBy(u => u.CreatedAt)
-                            : query.OrderByDescending(u => u.CreatedAt),
-                        "lastlogin" => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase)
-                            ? query.OrderBy(u => u.LastLogin)
-                            : query.OrderByDescending(u => u.LastLogin),
-                        _ => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase)
-                            ? query.OrderBy(u => u.Email)
-                            : query.OrderByDescending(u => u.Email),
-                    };
-                    _logger.LogInformation("Zapytanie po sortowaniu sortBy={sortBy}, sortOrder={sortOrder}: {query}", sortBy, sortOrder, query.ToQueryString());
-                }
+                    "role" => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase) ? query.OrderBy(u => u.Role) : query.OrderByDescending(u => u.Role),
+                    "isactive" => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase) ? query.OrderBy(u => u.IsActive) : query.OrderByDescending(u => u.IsActive),
+                    "createdat" => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase) ? query.OrderBy(u => u.CreatedAt) : query.OrderByDescending(u => u.CreatedAt),
+                    "lastlogin" => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase) ? query.OrderBy(u => u.LastLogin) : query.OrderByDescending(u => u.LastLogin),
+                    _ => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase) ? query.OrderBy(u => u.Email) : query.OrderByDescending(u => u.Email),
+                };
 
-                // Liczba wyników przed paginacją
+                // Total count
                 var totalItems = await query.CountAsync();
-                _logger.LogInformation("Liczba wyników po zastosowaniu filtrów: {totalItems}", totalItems);
 
-                // Zastosowanie paginacji i mapowanie na DTO
+                // Pagination
                 var users = await query
                     .Skip((page - 1) * pageSize)
                     .Take(pageSize)
@@ -119,9 +100,7 @@ namespace BudgetManagerAPI.Controllers
                         LastLogin = user.LastLogin
                     })
                     .ToListAsync();
-                _logger.LogInformation("Pobrano {count} użytkowników na stronie {page}.", users.Count, page);
 
-                // Przygotowanie wyniku jako PagedResult
                 var result = new PagedResult<UserAdminResponseDto>
                 {
                     CurrentPage = page,
@@ -131,192 +110,289 @@ namespace BudgetManagerAPI.Controllers
                     Items = users
                 };
 
-                _logger.LogInformation("Zakończono pobieranie użytkowników. Łącznie stron: {totalPages}", result.TotalPages);
-                return Ok(result);
+                return Ok(new SuccessResponseDto<PagedResult<UserAdminResponseDto>>
+                {
+                    Success = true,
+                    Message = $"Returned {result.TotalItems} users.",
+                    Data = result,
+                    TraceId = HttpContext.TraceIdentifier,
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Wystąpił błąd podczas pobierania użytkowników.");
-                return StatusCode(500, new { Message = "Wystąpił błąd podczas przetwarzania żądania." });
+                _logger.LogError(ex, "An error occurred while fetching users. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An unexpected error occurred. Please try again later.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
         }
 
-        [HttpPatch("{id}/role")]
-        public async Task<IActionResult> UpdateUserRole(int id, [FromBody] UpdateRoleDto roleDto)
-        {
-            var user = await _context.Users.FindAsync(id);
-            if (user == null)
-            {
-                return NotFound(new { Message = "User with ID {id} not found.", id });
-            }
-
-            if (!Roles.All.Contains(roleDto.Role))
-            {
-                return BadRequest(new { Message = "Invalid role specified." });
-            }
-
-            user.Role = roleDto.Role;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "An error occurred while update user role.");
-                return StatusCode(500, new { Message = "An error occurred while processing your request." });
-            }
-        }
 
         // POST: api/User
 
         [HttpPost]
-        public async Task<ActionResult<UserResponseDto>> PostUser(UserRequestDto userRequestDto)
+        public async Task<IActionResult> PostUser([FromBody] UserRequestDto userRequestDto)
         {
-
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Invalid request data.",
+                    ErrorCode = ErrorCodes.Unathorized,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
             if (_context.Users.Any(u => u.Email == userRequestDto.Email))
             {
-                return BadRequest(new { Message = "Email is already in use." });
+                return Conflict(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Email is already in use.",
+                    ErrorCode = ErrorCodes.Conflict,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
+            if (!Roles.All.Contains(userRequestDto.Role))
+            {
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = $"Invalid role. Allowed roles are: {string.Join(", ", Roles.All)}",
+                    ErrorCode = ErrorCodes.InvalidData,
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
 
             var user = new User
             {
                 Email = userRequestDto.Email,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(userRequestDto.Password),
                 Role = userRequestDto.Role,
+                CreatedAt = DateTime.UtcNow,
+                IsActive = true // Domyślna aktywacja nowego użytkownika
             };
 
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
-
-
-
-            return CreatedAtAction("GetUser", new { id = user.Id }, new UserResponseDto
+            try
             {
-                Id = user.Id,
-                Email = user.Email,
-                Role = user.Role,
+                _context.Users.Add(user);
+                await _context.SaveChangesAsync();
 
-            });
+                return Ok(new SuccessResponseDto<UserResponseDto>
+                {
+                    Success = true,
+                    Message = "User created successfully.",
+                    Data = new UserResponseDto
+                    {
+                        Id = user.Id,
+                        Email = user.Email,
+                        Role = user.Role,
+                        IsActive= user.IsActive,
+                    },
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while creating a new user. TraceId: {TraceId}", HttpContext.TraceIdentifier);
+
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request. Please try again later.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
         }
 
-        // PUT: api/User/5
+
         [HttpPut("{id}")]
         public async Task<IActionResult> PutUser(int id, [FromBody] UpdateUserDto updateUserDto)
         {
-            // Sprawdzenie, czy użytkownik istnieje
+            if (id <= 0)
+            {
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Invalid user ID.",
+                    ErrorCode = ErrorCodes.Unathorized,
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
+
             var user = await _context.Users.FindAsync(id);
             if (user == null)
             {
-                return NotFound(new { Message = $"User with ID {id} not found." });
+                return NotFound(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = $"User with ID {id} not found.",
+                    ErrorCode = ErrorCodes.NotFound,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
-            // Walidacja: Predefiniowani użytkownicy nie mogą być edytowani
             if (id >= 1 && id <= 3)
             {
-                return BadRequest(new { Message = "Predefined users cannot be edited." });
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Predefined users cannot be edited.",
+                    ErrorCode = ErrorCodes.Allowed,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
-            // Aktualizacja pól
+            // Aktualizacja email
             if (!string.IsNullOrEmpty(updateUserDto.Email))
             {
                 user.Email = updateUserDto.Email;
             }
 
+            // Aktualizacja roli
             if (!string.IsNullOrEmpty(updateUserDto.Role))
             {
-                // Walidacja roli
                 if (!Roles.All.Contains(updateUserDto.Role))
                 {
-                    return BadRequest(new { Message = $"Invalid role. Allowed roles are: {string.Join(", ", Roles.All)}" });
+                    return BadRequest(new ErrorResponseDto
+                    {
+                        Success = false,
+                        Message = $"Invalid role. Allowed roles are: {string.Join(", ", Roles.All)}",
+                        ErrorCode = ErrorCodes.InvalidData,
+                        TraceId = HttpContext.TraceIdentifier
+                    });
                 }
-
                 user.Role = updateUserDto.Role;
+
+            }
+
+
+            if (updateUserDto.isActive)
+            {
+                user.IsActive = true;
+                user.ActivationToken = string.Empty;
+            }
+            else
+            {
+                user.IsActive = false;
             }
 
             try
             {
                 await _context.SaveChangesAsync();
-                return NoContent();
+
+                return Ok(new SuccessResponseDto<UpdateUserResponseDto>
+                {
+                    Success = true,
+                    Message = "User updated successfully.",
+                    Data = new UpdateUserResponseDto
+                    {
+                       Id = user.Id,
+                       Email = user.Email,
+                       Role = user.Role,
+                       IsActive = user.IsActive,
+                       CreatedAt = user.CreatedAt,
+                       LastLogin = user.LastLogin
+                    },
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
             catch (DbUpdateConcurrencyException)
             {
-                return Conflict(new { Message = "Concurrency conflict occurred while updating the user." });
+                return Conflict(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Concurrency conflict occurred while updating the user.",
+                    ErrorCode = ErrorCodes.Conflict,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred while updating user with ID {Id}.", id);
-                return StatusCode(500, new { Message = "An error occurred while processing your request." });
-            }
-        }
-
-        [HttpPatch("{id}/change-is-active")]
-        public async Task<IActionResult> ChangeIsActive(int id, ChangeActiveUserDto dto)
-        {
-            var user = await _context.Users.FindAsync(id);
-            if (user == null)
-            {
-                return NotFound(new { Message = "User with ID {id} not found.", id });
-            }
-
-            if (id == GetParseUserId())
-            {
-                return BadRequest(new { Message = "You cannot deactivate yourself." });
-            }
-
-            user.IsActive = dto.IsActive;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "An error occurred while update user active.");
-                return StatusCode(500, new { Message = "An error occurred while processing your request." });
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
         }
 
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteUser(int id)
         {
-            // Walidacja: Sprawdzenie, czy użytkownik istnieje
+            if (id <= 0)
+            {
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Invalid user ID.",
+                    ErrorCode = ErrorCodes.Unathorized,
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
+
             var user = await _context.Users.FindAsync(id);
             if (user == null)
             {
-                return NotFound(new { Message = $"User with ID {id} not found." });
+                return NotFound(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = $"User with ID {id} not found.",
+                    ErrorCode = ErrorCodes.NotFound,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
-            // Walidacja: Predefiniowani użytkownicy nie mogą być usuwani
             if (id >= 1 && id <= 3)
             {
-                return BadRequest(new { Message = "Predefined users cannot be deleted." });
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Predefined users cannot be deleted.",
+                    ErrorCode = ErrorCodes.Allowed,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
 
             try
             {
-                // Usuwanie użytkownika
                 _context.Users.Remove(user);
                 await _context.SaveChangesAsync();
 
                 _logger.LogInformation("User with ID {Id} deleted successfully.", id);
-                return Ok(new { Message = $"User with ID {id} has been deleted successfully." });
+
+                return Ok(new SuccessResponseDto<object>
+                {
+                    Success = true,
+                    Message = $"User with ID {id} has been deleted successfully.",
+                    TraceId = HttpContext.TraceIdentifier,
+                    Data = null
+                });
             }
             catch (Exception ex)
             {
-                // Obsługa błędów
-                _logger.LogError(ex, "An error occurred while trying to delete user with ID {Id}.", id);
-                return StatusCode(500, new { Message = "An error occurred while processing your request. Please try again later." });
+                _logger.LogError(ex, "An error occurred while trying to delete user with ID {Id}. TraceId: {TraceId}", id, HttpContext.TraceIdentifier);
+
+                return StatusCode(500, new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while processing your request. Please try again later.",
+                    ErrorCode = ErrorCodes.InternalServerError,
+                    TraceId = HttpContext.TraceIdentifier
+                });
             }
         }
+
 
 
 

@@ -28,5 +28,7 @@
         public const string Conflict = "CONFILCT";
         public const string NotFound = "NOT_FOUND";
         public const string InvalidId = "INVALID_ID";
+        public const string Allowed = "ALLOWED";
+        public const string InvalidData = "INVALID_DATA";
     }
 }

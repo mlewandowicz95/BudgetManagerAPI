@@ -1,6 +1,6 @@
 ﻿namespace BudgetManagerAPI.DTO
 {
-    public class ReportInfo
+    public class ReportInfoDto
     {
         public string Name { get; set; }
         public string Description { get; set; }
