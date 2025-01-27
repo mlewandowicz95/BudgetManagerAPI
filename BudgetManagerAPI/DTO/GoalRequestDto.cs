@@ -12,9 +12,10 @@ namespace BudgetManagerAPI.DTO
         [Range(0.01, double.MaxValue, ErrorMessage = "Please enter a value bigger than {0.01}")]
         public decimal TargetAmount { get; set; }
 
-        [Range(0.01, double.MaxValue, ErrorMessage = "Please enter a value bigger than {0.01}")]
+        [Range(0, double.MaxValue, ErrorMessage = "Please enter a value bigger than {0.01}")]
         public decimal CurrentProgress { get; set; }
 
+        [Required]
         [DataType(DataType.Date)]
         public DateTime? DueDate { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.Now;

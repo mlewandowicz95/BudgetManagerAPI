@@ -450,12 +450,15 @@ namespace BudgetManagerAPI.Controllers
                 user.ResetTokenExpiry = DateTime.UtcNow.AddHours(1);
                 await _context.SaveChangesAsync();
 
-                // Wysyłanie e-maila aktywacyjnego
-                var activationLink = Url.Action(
-                    nameof(RequestPasswordReset),
-                    "Auth",
-                    new { token = user.ResetToken },
-                    protocol: HttpContext.Request.Scheme);
+
+                var activationLink = $"http://localhost:8080/reset-password?token={user.ResetToken}";
+
+                //// Wysyłanie e-maila aktywacyjnego
+                //var activationLink = Url.Action(
+                //    nameof(ResetPassword),
+                //    "Auth",
+                //    new { token = user.ResetToken },
+                //    protocol: HttpContext.Request.Scheme);
 
                 await _emailService.SendEmailAsync(user.Email, "Reset your password",
                     $"Use the following link to reset your password: {activationLink}");

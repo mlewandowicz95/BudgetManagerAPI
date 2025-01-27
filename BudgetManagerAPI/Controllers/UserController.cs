@@ -12,7 +12,7 @@ using System.Security.Claims;
 
 namespace BudgetManagerAPI.Controllers
 {
-    [Authorize]
+
     [Route("api/[controller]")]
     [ApiController]
     public class UserController : BaseController
@@ -34,6 +34,7 @@ namespace BudgetManagerAPI.Controllers
 
 
         // GET: api/User/5
+        [Authorize]
         [HttpGet("profile")]
         public async Task<ActionResult<UserResponseDto>> GetUserProfile()
         {
@@ -96,7 +97,7 @@ namespace BudgetManagerAPI.Controllers
             }
         }
 
-
+        [Authorize]
         [HttpPost("profile/change-password")]
         public async Task<IActionResult> ChangePassword(ChangePasswordRequestDto changePasswordRequestDto)
         {
@@ -188,6 +189,7 @@ namespace BudgetManagerAPI.Controllers
 
         }
 
+        [Authorize]
         [HttpPut("profile/email")]
         public async Task<IActionResult> RequestEmailChange([FromBody] UpdateEmailDto dto)
         {
@@ -239,12 +241,13 @@ namespace BudgetManagerAPI.Controllers
 
                 await _context.SaveChangesAsync();
 
-                var confirmationLink = Url.Action(
-                    nameof(RequestEmailChange),
-                    "Auth",
+              /*  var confirmationLink = Url.Action(
+                    nameof(ConfirmEmailChange),
+                    "User",
                     new { token = user.EmailChangeToken },
-                    protocol: HttpContext.Request.Scheme);
+                    protocol: HttpContext.Request.Scheme); */
 
+                var confirmationLink = $"{HttpContext.Request.Scheme}://{HttpContext.Request.Host}/confirm-email-change?token={user.EmailChangeToken}";
 
 
                 await _emailService.SendEmailAsync(dto.NewEmail, "Confirm Email Change",
@@ -272,7 +275,7 @@ namespace BudgetManagerAPI.Controllers
             }
         }
 
-        [HttpGet("profile/email/confirm")]
+        [HttpGet("confirm-email-change")]
         public async Task<IActionResult> ConfirmEmailChange([FromQuery] string token)
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.EmailChangeToken == token);
@@ -299,11 +302,11 @@ namespace BudgetManagerAPI.Controllers
                 await _context.SaveChangesAsync();
 
                 return Ok(new SuccessResponseDto<object>
-                { 
+                {
                     Success = true,
                     Message = "Email address updated successfully.",
                     TraceId = HttpContext.TraceIdentifier,
-                    Data = null
+                    Data = user.Email
                 });
             }
             catch (Exception ex)

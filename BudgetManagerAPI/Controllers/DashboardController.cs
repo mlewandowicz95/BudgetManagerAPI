@@ -200,6 +200,8 @@ namespace BudgetManagerAPI.Controllers
 
                 var monthlyData = transactions
                     .GroupBy(t => new { t.Date.Year, t.Date.Month })
+                    .OrderBy(g => g.Key.Year)
+                    .ThenBy(g => g.Key.Month)
                     .Select(g => new
                     {
                         Year = g.Key.Year,
@@ -207,7 +209,6 @@ namespace BudgetManagerAPI.Controllers
                         Income = g.Where(t => t.Type == TransactionType.Income).Sum(t => t.Amount),
                         Expenses = g.Where(t => t.Type == TransactionType.Expense).Sum(t => t.Amount)
                     })
-                    .OrderByDescending(m => new { m.Year, m.Month })
                     .Take(12)
                     .ToList();
 

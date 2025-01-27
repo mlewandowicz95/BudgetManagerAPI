@@ -157,9 +157,28 @@ namespace BudgetManagerAPI
             app.UseMiddleware<TokenRevocationMiddleware>();
             app.Use(async (context, next) =>
             {
-             //   Console.WriteLine($"Incoming request: {context.Request.Method} {context.Request.Path}");
-                await next.Invoke();
+                if (context.Request.Path.StartsWithSegments("/confirm-email-change"))
+                {
+                    var newPath = $"http://localhost:8080{context.Request.Path}{context.Request.QueryString}";
+                    Console.WriteLine($"Redirecting to: {newPath}");
+                    context.Response.Redirect(newPath);
+                    return;
+                }
+
+                if (context.Request.Path.StartsWithSegments("/reset-password"))
+                {
+                    var newPath = $"http://localhost:8080{context.Request.Path}{context.Request.QueryString}";
+                    Console.WriteLine($"Redirecting to: {newPath}");
+                    context.Response.Redirect(newPath);
+                    return;
+                }
+
+
+
+                await next();
             });
+
+
             app.MapControllers();
 
             app.Run();
