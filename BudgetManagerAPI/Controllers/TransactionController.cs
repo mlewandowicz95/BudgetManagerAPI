@@ -97,9 +97,12 @@ namespace BudgetManagerAPI.Controllers
                     {
                         "amount" => sortOrder.Equals("asc", StringComparison.CurrentCultureIgnoreCase) ? query.OrderBy(t => t.Amount) : query.OrderByDescending(t => t.Amount),
                         "category" => sortOrder.Equals("asc", StringComparison.CurrentCultureIgnoreCase) ? query.OrderBy(t => t.Category.Name) : query.OrderByDescending(t => t.Category.Name),
+                        "description" => sortOrder.Equals("asc", StringComparison.CurrentCultureIgnoreCase) ? query.OrderBy(t => t.Description) : query.OrderByDescending(t => t.Description),
+                        "type" => sortOrder.Equals("asc", StringComparison.CurrentCultureIgnoreCase) ? query.OrderBy(t => t.Type) : query.OrderByDescending(t => t.Type),
                         _ => sortOrder.Equals("asc", StringComparison.CurrentCultureIgnoreCase) ? query.OrderBy(t => t.Date) : query.OrderByDescending(t => t.Date),
                     };
                 }
+
 
                 var totalItems = await query.CountAsync();
 
