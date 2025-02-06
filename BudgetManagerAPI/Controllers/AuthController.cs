@@ -325,13 +325,6 @@ namespace BudgetManagerAPI.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequestDto userDto)
         {
-            /*
-            if (!ModelState.IsValid)
-            {
-                _logger.LogError("Model state is not valid");
-                return BadRequest(ModelState);
-            }
-            */
             if (!ModelState.IsValid)
             {
                 var errors = ModelState
@@ -381,7 +374,7 @@ namespace BudgetManagerAPI.Controllers
 
                 user.LastLogin = DateTime.UtcNow;
 
-                var token = _tokenService.GenerateToken(user.Id, user.Role);
+                var token = _tokenService.GenerateToken(user.Id, user.Role, user.Email);
 
                 await _context.SaveChangesAsync();
 

@@ -27,7 +27,7 @@ namespace BudgetManagerAPI.Controllers
         [HttpGet("users")]
         public async Task<IActionResult> GetAllUsers(
             [FromQuery] bool? isActive,
-            [FromQuery] IEnumerable<string> roles,
+            [FromQuery] List<string> roles,
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 20,
             [FromQuery] string sortBy = "email",
@@ -59,8 +59,27 @@ namespace BudgetManagerAPI.Controllers
                     query = query.Where(u => u.IsActive == isActive.Value);
                 }
 
+                var rolesRaw = HttpContext.Request.Query["roles"].ToString();
+                _logger.LogInformation("Odebrane roles: {RolesRaw}", rolesRaw);
+
+                // Jeśli brak ról lub roles == null, zwróć wszystkich użytkowników
+                if (string.IsNullOrEmpty(rolesRaw))
+                {
+                    var rolesFromQuery = rolesRaw.Split(",").ToList();
+                    if (rolesFromQuery.Count > 0 && rolesFromQuery.All(r => Roles.All.Contains(r)))
+                    {
+                        query = query.Where(u => rolesFromQuery.Contains(u.Role));
+                    }
+                }
+                else
+                {
+                    var rolesFromQuery = rolesRaw.Split(",").ToList();
+                    query = query.Where(u => rolesFromQuery.Contains(u.Role));
+                }
+
+                /*
                 // Filter by roles
-                if (roles?.Any() == true)
+                if (roles != null && roles.Any())
                 {
                     var validRoles = roles.Where(role => Roles.All.Contains(role)).ToHashSet();
                     if (validRoles.Any())
@@ -72,10 +91,12 @@ namespace BudgetManagerAPI.Controllers
                         _logger.LogWarning("None of the provided roles match the allowed roles.");
                     }
                 }
+                */
 
                 // Sorting
                 query = sortBy.ToLower() switch
                 {
+                    "id" => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase) ? query.OrderBy(u => u.Id) : query.OrderByDescending(u => u.Id),
                     "role" => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase) ? query.OrderBy(u => u.Role) : query.OrderByDescending(u => u.Role),
                     "isactive" => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase) ? query.OrderBy(u => u.IsActive) : query.OrderByDescending(u => u.IsActive),
                     "createdat" => sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase) ? query.OrderBy(u => u.CreatedAt) : query.OrderByDescending(u => u.CreatedAt),

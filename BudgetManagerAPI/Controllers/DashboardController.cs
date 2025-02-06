@@ -65,6 +65,7 @@ namespace BudgetManagerAPI.Controllers
                     .Take(5)
                     .Select(t => new TransactionDto
                     {
+                        Id = t.Id,
                         Date = t.Date,
                         Amount = t.Amount,
                         CategoryName = t.Category.Name,

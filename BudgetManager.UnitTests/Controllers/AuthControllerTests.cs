@@ -1,5 +1,4 @@
-﻿using Azure;
-using BudgetManagerAPI.Configurations;
+﻿using BudgetManagerAPI.Configurations;
 using BudgetManagerAPI.Constants;
 using BudgetManagerAPI.Controllers;
 using BudgetManagerAPI.Data;
@@ -8,27 +7,17 @@ using BudgetManagerAPI.Interfaces;
 using BudgetManagerAPI.Models;
 using BudgetManagerAPI.Services;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.VisualStudio.TestPlatform.Common;
 using Moq;
-using Newtonsoft.Json.Linq;
-using System;
-using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.IdentityModel.Tokens.Jwt;
-using System.Linq;
-using System.Linq.Dynamic.Core.Tokenizer;
-using System.Linq.Expressions;
 using System.Reflection;
 using System.Security.Claims;
 using System.Text;
-using System.Threading.Tasks;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace BudgetManager.UnitTests.Controllers
 {
@@ -1831,7 +1820,7 @@ namespace BudgetManager.UnitTests.Controllers
             _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
 
             // Użycie istniejącej metody GenerateToken do wygenerowania poprawnego tokena
-            var validToken = _tokenService.GenerateToken(userId: 1, role: "User");
+            var validToken = _tokenService.GenerateToken(userId: 1, role: "User", email: "test@example.com");
             var expiryDate = DateTime.UtcNow.AddMinutes(10); // Czas wygaśnięcia tokena
 
             // Ustawienie nagłówka Authorization z poprawnym tokenem
@@ -1871,7 +1860,7 @@ namespace BudgetManager.UnitTests.Controllers
 
 
             // Użycie istniejącej metody GenerateToken do wygenerowania poprawnego tokena
-            var validToken = _tokenService.GenerateToken(userId: 1, role: "User");
+            var validToken = _tokenService.GenerateToken(userId: 1, role: "User", email: "test@example.com");
             var expiryDate = DateTime.UtcNow.AddMinutes(10); // Czas wygaśnięcia tokena
 
             // Ustawienie nagłówka Authorization z poprawnym tokenem
