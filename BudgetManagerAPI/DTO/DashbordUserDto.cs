@@ -22,6 +22,7 @@
 
     public class GoalDto
     {
+        public int Id { get; set; }
         public string Name { get; set; }
         public decimal TargetAmount { get; set; }
         public decimal CurrentProgress { get; set; }

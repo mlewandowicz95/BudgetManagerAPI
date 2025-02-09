@@ -84,6 +84,7 @@ namespace BudgetManagerAPI.Controllers
 
                 var goalsDtos = goals.Select(g => new GoalDto
                 {
+                    Id = g.Id,
                     Name = g.Name,
                     TargetAmount = g.TargetAmount,
                     CurrentProgress = g.CurrentProgress,

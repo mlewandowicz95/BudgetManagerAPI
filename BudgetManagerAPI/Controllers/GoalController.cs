@@ -429,6 +429,19 @@ namespace BudgetManagerAPI.Controllers
                 });
             }
 
+            bool hasTransactions = await _context.Transactions.AnyAsync(t => t.GoalId == id);
+            if(hasTransactions)
+            {
+                _logger.LogWarning($"Can't delete goal {goal.Id} with connecting transactions. At the first delete transactions in relation.");
+                return BadRequest(new ErrorResponseDto
+                {
+                    Success = false,
+                    Message = "Can't delete goal with connecting transactions. At the first delete transactions in relation.",
+                    ErrorCode = ErrorCodes.Allowed,
+                    TraceId = HttpContext.TraceIdentifier
+                });
+            }
+
             if (goal.UserId != userId)
             {
                 _logger.LogWarning("Unauthorized delete attempt by user {UserId} for goal {GoalId}. TraceId: {TraceId}", userId, id, HttpContext.TraceIdentifier);
